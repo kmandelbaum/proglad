@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <link rel="stylesheet" href="{{base_url_path}}/static/cards.css">
+  </head>
+  <body>
+    <div class="card-container" id="card-container">
+      {{#each games}}
+          <div class="card">
+              <a class="card-link" href="{{url}}">
+                <div class="card-header">
+                    <h2>{{title}}</h2>
+                </div>
+              <img src="{{image_src}}" alt="{{title}}" class="card-image"/>
+              <div class="card-description">
+                  <p>{{description}}</p>
+              </div>
+              </a>
+              <div class="card-footer">
+                  <div class="info-line">
+                    <div class="bot-info">
+                        <span class="bot-icon">&#129302;</span>
+                        <span class="bot-count">{{num_bots}}</span>
+                    </div>
+                    <div class="bot-info">
+                        <span class="bot-icon">&#128100;</span>
+                        <span class="bot-count">{{num_authors}}</span>
+                    </div>
+                    <div class="bot-info">
+                        <a href={{replay_url}}>
+                            <img src="{{../base_url_path}}/static/replay-button.png" width="45"/>
+                        </a>
+                    </div>
+                  </div>
+              </div>
+          </div>
+      {{/each}}
+    </div>
+  </body>
+</html>

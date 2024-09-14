@@ -1,0 +1,4 @@
+param inlinevisualize
+start
+recv 1 move 1 5 1 6
+recv 2 move 16 12 16 11

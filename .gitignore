@@ -1,0 +1,11 @@
+**/target
+*/www
+api/Cargo.lock
+controller/Cargo.lock
+prod
+server/db.sqlite
+server/db.sqlite-journal
+server/db.sqlite-shm
+server/db.sqlite-wal
+server/db/Cargo.lock
+server/log

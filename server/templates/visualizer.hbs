@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta content="text/html;charset=utf-8" http-equiv="Content-Type"/>
+    <link rel="stylesheet" href="{{base_url_path}}/static/visualizer/visualizer.css">
+</head>
+
+<body>
+  <div class="player">
+    <div class="main-container">
+      <div class="canvas-container" id="canvas-container">
+        <div class="controls">
+          <button id="playpause">▶️</button>
+          <input type="range" min="0" max="1" value="0" class="slider" id="progress-slider" step="0.001"/>
+        </div>
+        <svg id="canvas">
+            <g id="inner-svg"></g>
+        </svg>
+      </div>
+      <div class="right-pane" id="right-pane">
+        <div class="metadata-card" id="metadata-card">
+            <span>Match {{match_id}}</span>
+            <span>Created: {{this.match_data.creation_time}}</span>
+            <span>Duration: {{this.match_data.duration}}</span>
+            <span>{{this.match_data.system_message}}</span>
+            <span>Scores:</span>
+            <table>
+              {{#each this.match_data.participations}}
+                <tr>
+                  <td style="widht:40%;">{{this.bot_name}}</td>
+                  <td style="width:20%;">{{this.score}}</td>
+                  <td style="width:40%;">{{this.system_message}}</td>
+                </tr>
+              {{/each}}
+            </table>
+        </div>
+        <div class="log-container" id="log-container">
+          <ul id="log"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="{{base_url_path}}/static/visualizer/proglad_visualizer.js"></script>
+  <script type="module">
+        import init, {run} from "{{base_url_path}}/static/visualizer/proglad_visualizer.js";
+        await init();
+        run("{{base_url_path}}/replay/{{match_id}}");
+  </script>
+</body>
+</html>

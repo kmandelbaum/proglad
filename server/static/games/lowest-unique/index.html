@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <link rel="stylesheet" href="../common.css">
+  </head>
+  <body>
+    <h1>Lowest Unique</h1>
+    <img src="./icon.svg" width=300 height=300>
+    <h2>Rules</h2>
+    <p>
+    The game consists of <code>R</code> rounds. Each round each of the <code>N</code> players picks a number between <code>1</code> and <code>M</code>, inclusive, to "bid" on. After each player picks their number, the game server will determine the winner and broadcast the move to all players. The lowest unique number wins, and the player that picked it is awarded 1 point.
+    </p>
+    <p>
+    If there was no unique number picked, the number that was picked the least, but at least once, wins. The point is divided equally among players that picked the winning number, resulting in fractional points. Since each round exactly one total point is awarded, at the end of the game, the total score awarded to players will be <code>R</code>.
+    </p>
+    <p>
+    On the picture above, <code>N=6</code>, <code>M=10</code>, and after this move, players 1, 4, and 5 picked 2, player 3 picked 7, and won, player 6 picked 9, and player 2 picked 10.
+    </p>
+    <h2>I/O Protocol</h2>
+    <ol>
+      <li>The program must output <code>ready</code> on a single line at startup.</li>
+      <li>The program will receive <code>start N p M R</code>, where <code>N</code> is the number of players, <code>p</code> is the index of the player that this program is playing as (<code>1 <= p <= N</code>), <code>M</code> is the maximum number availabe to pick on each move, and <code>R</code> is the number of rounds.</li>
+      <li>At the beginning of each move, the program will receive a <code>yourmove</code> command: the single word <code>yourmove</code> on a line.</li>
+      <li>The program must output a line containing the single number <code>mp</code> (<code>1 <= mp <= M</code>), within <code>1 second</code> of receiving the <code>yourmove</code> command.</li>
+      <li>At the end of each move, the program will receive a <code>move W m1 m2 ... mN</code> line, which means that a move with winning number <code>W</code> has finished, and the player's moves were <code>m1,m2,...,mN.</code></li>
+      <li>The program should exit when its standard input is closed.</li>
+    </ol>
+    Example communication sequence for player 3 (the actual contents of stdin and stdout are without "read", "write" or leading spaces or "|" symbols):
+    <ol>
+      <li><tt><pre>write | </pre><code>ready</code></tt></li>
+      <li><tt><pre>read  | </pre><code>start 6 3 10 500</code></tt></li>
+      <li><tt><pre>read  | </pre><code>yourmove</code></tt></li>
+      <li><tt><pre>write | </pre><code>7</code></tt></li>
+      <li><tt><pre>read  | </pre><code>move 7 2 10 7 2 2 9</code></tt></li>
+      <li><tt><pre>read  | </pre><code>yourmove</code></tt></li>
+      <li><tt><pre>...</pre></tt></li>
+    </ol>
+  </body>
+</html>
+

@@ -1,0 +1,41 @@
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    background-color: #f4f4f4;
+    font-family: Arial, sans-serif;
+}
+
+.menu {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.menu-button {
+    display: block;
+    width: 200px;
+    padding: 15px 0;
+    margin: 10px 0;
+    font-size: 20px;
+    text-align: center;
+    color: white;
+    background-color: #007BFF;
+    border: none;
+    border-radius: 5px;
+    text-decoration: none;
+    transition: background-color 0.3s, transform 0.3s;
+}
+
+.menu-button:hover {
+    background-color: #0056b3;
+    transform: scale(1.05);
+}
+
+.menu-button:active {
+    background-color: #004080;
+    transform: scale(1);
+}
+

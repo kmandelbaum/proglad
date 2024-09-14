@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Main Menu</title>
+    <link rel="stylesheet" href="../static/index.css">
+</head>
+<body>
+    <div class="menu">
+        <h1>Program Gladiators!</h1>
+        <p>Write programs that play games with other programs.</p>
+        <a href="../static/readme.html" class="menu-button">Readme</a>
+        <a href="../games" class="menu-button">Games</a>
+        <a href="../bots" class="menu-button">Recent Bots</a>
+        <a href="../matches" class="menu-button">Recent Matches</a>
+
+      {{#if authenticated}}
+        <a href="../bots?account_id={{account_id}}" class="menu-button">My Bots</a>
+        <a href="../matches?account_id={{account_id}}" class="menu-button">My Matches</a>
+      {{/if}}
+
+      {{#if authenticated}}
+        <a href="../logout" class="menu-button">Logout</a>
+        <a href="{{auth_url}}/settings" class="menu-button">Account Settings</a>
+      {{else}}
+        <a href="{{auth_url}}/login" class="menu-button">Login</a>
+        <a href="{{auth_url}}/registration" class="menu-button">Sign Up</a>
+      {{/if}}
+    </div>
+</body>
+</html>
+

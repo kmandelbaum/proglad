@@ -1,0 +1,101 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-color: #f0f0f0;
+    overflow: hidden;
+}
+
+.container {
+    display: grid;
+    grid-template-columns: 1fr 3fr 1fr;
+    grid-gap: 10px;
+    width: 80%;
+    height: 100%;
+    background-color: #fff;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.left-column, .right-column {
+    padding: 20px;
+    background-color: #f8f8f8;
+}
+
+.left-column ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+.left-column ul li {
+    margin: 10px 0;
+}
+
+.left-column ul li a {
+    text-decoration: none;
+}
+
+.center-column iframe,object {
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+.right-column form {
+    display: flex;
+    flex-direction: column;
+}
+
+.right-column form label {
+    margin-top: 10px;
+}
+
+.right-column form input, .right-column form button {
+    margin-top: 5px;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+.right-column form button {
+    background-color: #007BFF;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+.right-column form button:hover {
+    background-color: #0056b3;
+}
+
+input[type="file"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    clip-path: inset(50%);
+    border: 0;
+}
+
+.file-upload-label {
+    border: 1px solid;
+}
+
+.file-upload-label:hover {
+    background-color: grey;
+}
+
+/* When the visually hidden child input has focus, style the parent. */
+.file-upload-label:focus-within {
+    outline: 1px solid;
+}
+
+.bold {
+  font-weight: bold;
+}

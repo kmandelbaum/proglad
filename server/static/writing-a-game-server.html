@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Writing A Game Server</title>
+    <link rel="stylesheet" href="../static/games/common.css">
+</head>
+<body>
+  <h1>A Game Server</h1>
+    <p>A Game Server is a program that implements some game for other bots to play.</p>
+  <h1>Code</h1>
+    The game servers are developed using any of the supported programming languages. The code is a single file, referencing no dependencies outside the language's standard library; it is subject to the exact same constraints as bot code. <i>This constraint is likely to change in the future to support better developer experience.</i>
+  <h1>Rules</h1>
+    <p>All communication happens through standard input and output, with a text line-based interface. All lines have limited lenght (currently set to 1024).</p>
+    <p>The game server might receive a <code>param p1 p2 p3...</code> line at the start with game-specific parameters (such as number of players). The param string template is configured in the database for each game, and is instantiated by the controller for each match. The last parameter is frequently <code>inlinevisualize</code>, which means that the Game Server is expected to produce visualization instructions while running the game.</p>
+    <p>If there are <code>P</code> players in the game, they are numbered from <code>1</code> to <code>P</code>. The game server does not know which players correspond to which bots, who their authors are or which languages they are written in. When commands like <code>recv</code>,<code>playererror</code>,<code>send</code> and <code>playererror</code> reference a player, this is the ingame player id <code>1<=p<=P</code>.</p>
+    <p>When all players are ready, the game server will receive a <code>start</code> message from the Controller.
+      Controller handles the <code>ready</code> messages that bots send, the game server doesn't need to, and can't.</p>
+    <p>After that the game server should run the game - communicate parameters to the bots, alternate turns, and handle messages from the bots</p>
+    <p>The game server will receive a <code>recv p msg</code> whenever a player <code>p</code> sends a message. The game server is responsible for dropping misbehaving players, including ones that send a message which it's not their turn.
+    <p>Use <code>send p msg</code> or <code>sendall msg</code> for sending messages to players.
+    </p>
+    <p>When the game is over, game server should produce a line with <code>over score1 score2 score3...msg</code> with the list of floating-point scores
+      that each player has at the end of the game, and an arbitrary message with a reason of why the game was over.
+    </p>
+    <p>During the game, the game server may utilize the <code>timer id Xms</code> command, where <code>id</code> is a unique positive number, and <code>X</code> is the number of milliseconds to set the timer for. After <code>X</code> millisecods elapse, the game server will receive a <code>timeout id</code> message. Note that there is no way to cancel a timer, and the timeout message must be handled correctly even if the timer expires way later than the players move. One way to do it is to ignore all the old timout messages, and only handle the currently active timer id. There could be arbitrarily many timers ticking at the same time.</p>
+  <h1>
+  <h1>Visualizer</h1>
+  <p>Some lines that the Game Server produces might start with <code>vis</code>. After that a JSON (/Hjson) object follows that
+        defines an event. Each of them must have a <code>t</code> field which is the time (in seconds) when the event happens.
+        The events must come in order, i.e. the value of <code>t</code> must never decrease from one <code>vis</code> line to the next.
+  </p>
+  <p>All coordinates are in the unit square <code>[0..1]x[0..1]</code>, top left corner being <code>(0,0)</code>.</p>
+  <p>Object IDs are chosen by the visualizer and must be unique, and must not be reused if deleted.
+  <h2>Examples</h2>
+  A transparent red square, outlined with a black border (the default) of width <code>0.006</code>:
+  <br>
+  <code>vis {"t":0,"create":{"id":123321,"z":3,"geom":[{"poly":{"f":"77000077","t":0.006,"vs":[[0.1, 0.1],[0.1,0.9],[0.9,0.9],[0.9,0.1]]}}]}}</code>
+  <br>
+  <br>
+  A green circle with a black border of width <code>0.003</code> that will appear <code>1.5</code> seconds after the match start.
+  <br>
+  <code>vis {"t":1.5,"create":{"id":33,"z":2,"p":[0.77,0.83],"geom":[{"circle":{"r":0.024,"f":"33cc33ff","t":0.003}}]}}</code>
+  <br>
+  <br>
+  Moving the circle defined above, over the cource of <code>0.3 seconds</code>, about <code>0.06</code> downward, starting at <code>2.3 seconds</code>.
+  <br>
+  <code>vis {"t":2.3,"transform":{"id":33,"d":0.3,"mv":[0,0.060000002]}}</code>
+
+  <h2>Hjson</h2>
+  The visualizer also accepts <a href="https://hjson.github.io/">Hjson</a>, which elides quotes for fields names,
+  making it easier to generate and read, and more compact. The examples above become:
+  <br>
+  <code>
+    vis {t:0,create:{id:123321,z:3,geom:[{poly:{f:"77000077",t:0.006,vs:[[0.1, 0.1],[0.1,0.9],[0.9,0.9],[0.9,0.1]]}}]}}
+    vis {t:1.5,create:{id:33,z:2,p:[0.77,0.83],geom:[{circle:{r:0.024,f:"33cc33ff",t:0.003}}]}}
+    vis {t:2.3,transform:{id:33,d:0.3,mv:[0,0.060000002]}}</code>
+  <h2>Full Spec</h2>
+  See <a href="../static/visualize.rs">visualize.rs</a> which contains the source code, and makes it clear what the visualizer accepts.
+</body>

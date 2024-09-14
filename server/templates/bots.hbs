@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <link rel="stylesheet" href="{{base_url_path}}/static/bots.css">
+  </head>
+  <body>
+    <table>
+      <tr>
+        <th>Game</th>
+        {{#if show_owner}}
+        <th>Owner</th>
+        {{/if}}
+        <th>Name</th>
+        <th>Created</th>
+        <th>Language</th>
+        <th>Status</th>
+        <th>Updated</th>
+      </tr>
+      {{#each bots}}
+        <tr>
+          <td>{{this.game}}</td>
+          {{#if ../show_owner}}
+          <td>{{this.owner}}</td>
+          {{/if}}
+          <td>{{this.name}}</td>
+          <td>{{this.created}}</td>
+          <td>{{this.language}}</td>
+          <td>{{this.status}}</td>
+          <td>{{this.updated}}</td>
+        <tr>
+      {{/each}}
+    </table>
+  </body>
+</html>

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <link rel="stylesheet" href="../common.css">
+  </head>
+  <body>
+    <h1>Halma</h1>
+    Based on the classic game of Halma.
+    <h2>How to play</h2>
+    <h3>The board</h3>
+    The game is played on a <code>16x16</code> square board. The top left corner has coordinates <code>(1, 1)</code>, the square to the right of it has coordinates <code>(2, 1)</code>, the square below it - <code>(1, 2)</code> and the bottom right corner of the board - <code>(16, 16)</code>.
+    This game uses 8-connectivity where cells are called <i>adjacent</i> iff they share a side or a corner. In other words, different cells <code>(x, y)</code> and <code>(p, q)</code> are adjacent iff <code>|x-p| &le; 1 && |y-q| &le; 1</code>.
+    This adjacency counts for both step moves and jumps (see below). 
+    <h3>Initial position</h3>
+    <img src="./initial.svg">
+    <h3>Moves</h3>
+    Players alternate their moves, starting from the red player at the top of the grid.
+    During their turn a player is allowed to move exactly one of their pieces to a new unoccupied space, in either of the two ways:
+    <ol>
+      <li>Move it to an adjacent unoccupied cell.</li>
+      <li>Perform an arbitrarily long series of jumps. During each jump the piece moves 2 spaces in a any direction, over an olready occupied cell into an unoccupied cell, in one of the 8 directions. The piece can not re-visit cell that were already visited by it during this move. Jump direction can be changed between jumps.</li>
+    </ol>
+    <h3>End of the game</h3>
+    There are three ways the game ends
+    <ol>
+      <li>One of the players moves all their pieces "home" - the area diagonally-opposite their starting position. The player that has moved all their pieces "home" is considered victorious and is awarded 2 points.</li>
+      <li>After both players make 100 moves, one or both players have a piece blocking the opponent's home, or any of the squares near it, i.e. a piece that hasn't left the starting triangle and the 2-cell wide, 15-cell strip adjacent to it. Such players are declared "blockers". If only one player is a blocker, their opponent is declared a winner and is awarded 2 points. If both players are blockers, the game is a draw and they are awarded 1 point each.</li>
+      <li>After both players made 1000 moves and none of the conditions above are met, the game is considered a draw, and players are awarded 1 point each.</li>
+    </ol>
+
+  <h2>I/O Protocol</h2>
+    <ol>
+      <li>The program must output <code>ready</code> on a single line at startup.</li>
+      <li>The program will receive <code>start p</code>, where <code>p</code> is the index of the player that this program is playing as (<code>1 <= p <= 2</code>)</li>
+      <li>At the beginning of its move, the program will receive a <code>yourmove</code> command: the single word <code>yourmove</code> on a line.</li>
+      <li>The program must output a line containing the move: <code>move x1 y1 x2 y2 ... Xk Yk</code> - a sequence of coordinates (<code>1 &le; xi, yi &le; 16</code>), of length <code>2*k</code> (<code>k &ge; 2</code>), within 50 milliseconds of receiving the <code>yourmove</code> command. The coordinates mark the beginning of the move, followed by all intermediate jump points, ending with the end point.
+      <li>At the end of each turn (both its own and the opponent's), the program will receive a <code>move x1 y1 x2 y2 ... Xn Yn</code> command specifying a move that was made.
+      <li>The program should exit when its standard input is closed.</li>
+    </ol>
+    Example communication sequence for player 1 (the actual contents of stdin and stdout are without "read", "write" or leading spaces or "|" symbols):
+    <ol>
+      <li><tt><pre>write | </pre><code>ready</code></tt></li>
+      <li><tt><pre>read  | </pre><code>start 1</code></tt></li>
+      <li><tt><pre>read  | </pre><code>yourmove</code></tt></li>
+      <li><tt><pre>write | </pre><code>move 1 3 3 5</code></tt></li>
+      <li><tt><pre>read  | </pre><code>move 1 3 3 5</code></tt></li>
+      <li><tt><pre>read  | </pre><code>move 14 16 12 14</code></tt></li>
+      <li><tt><pre>read  | </pre><code>yourmove</code></tt></li>
+      <li><tt><pre>write | </pre><code>move 2 2 4 4 2 6</code></tt></li>
+      <li><tt><pre>...</pre></tt></li>
+    </ol>
+  </body>
+</html>

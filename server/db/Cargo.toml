@@ -1,0 +1,8 @@
+[package]
+name = "proglad-db"
+version = "0.1.0"
+authors = ["Konstantin Mandelbaum <submulticativity@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+sea-orm = "0.12.15"

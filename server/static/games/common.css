@@ -1,0 +1,12 @@
+pre {
+  margin: 0;
+  display: inline;
+}
+code {
+  white-space: pre-wrap;
+  margin: 0;
+    background-color: #e5e5e5;
+    padding: 2px 1px;
+    border-radius: 2px;
+    font-family: monospace;
+}
