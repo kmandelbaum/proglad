@@ -11,7 +11,7 @@ log = "0.4.21"
 sea-orm = { version = "0.12.15", features = ["sqlx-sqlite", "runtime-tokio"] }
 sqlx = { version = "0.7.4", features = ["sqlite", "runtime-tokio"] }
 tempfile = "3.10.1"
-tokio = { version = "1.37.0", features = ["macros", "rt", "rt-multi-thread", "process", "fs"] }
+tokio = { version = "1.37.0", features = ["macros", "rt", "rt-multi-thread", "process", "fs", "sync"] }
 proglad-controller = { path = "../controller" }
 actix-web = "4.8.0"
 derive_more = "0.99.18"

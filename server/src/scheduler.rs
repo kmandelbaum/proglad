@@ -1,8 +1,23 @@
 use sea_orm::DatabaseConnection;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tokio::sync::oneshot;
 
 use proglad_controller::manager;
+
+#[derive(Default)]
+pub struct Handle {
+    cancel_senders: Vec<oneshot::Sender<()>>,
+    pub join_handles: Vec<tokio::task::JoinHandle<()>>,
+}
+
+impl Handle {
+    pub fn cancel(&mut self) {
+        for sender in std::mem::take(&mut self.cancel_senders) {
+            let _ = sender.send(());
+        }
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
@@ -15,44 +30,67 @@ pub async fn start(
     db: DatabaseConnection,
     man: Arc<manager::Manager>,
     config: &crate::config::Config,
-) {
+) -> Handle {
+    let mut handle = Handle::default();
     if !config.scheduler_config.enabled {
         log::info!("Scheduler is disabled.");
-        return;
+        return handle;
     }
     if let Some(compilation_period) = config.scheduler_config.compilation_check_period {
         let (db, man) = (db.clone(), man.clone());
+        let (cancel_tx, mut cancel_rx) = oneshot::channel();
         tokio::task::spawn(async move {
             loop {
                 if !crate::engine::choose_and_compile_program(&db, &man).await {
-                    tokio::time::sleep(compilation_period).await;
+                    tokio::select! {
+                        _ = tokio::time::sleep(compilation_period) => {}
+                        Ok(()) = &mut cancel_rx => { break; }
+                    }
+                } else if cancel_rx.try_recv().is_ok() {
+                        break;
                 }
             }
+            log::info!("Compilation loop canceled.");
         });
+        handle.cancel_senders.push(cancel_tx);
     }
     if let Some(cleanup_period) = config.scheduler_config.match_cleanup_check_period {
         let db = db.clone();
         let cfg = config.cleanup_config.clone();
-        tokio::task::spawn(async move {
+        let (cancel_tx, mut cancel_rx) = oneshot::channel();
+        let j = tokio::task::spawn(async move {
             loop {
-                tokio::time::sleep(cleanup_period).await;
+                tokio::select! {
+                    _ = tokio::time::sleep(cleanup_period) => {}
+                    Ok(()) = &mut cancel_rx => break
+                }
                 let _ = crate::engine::cleanup_matches_batch(&db, &cfg)
                     .await
                     .inspect_err(|e| log::error!("{e:?}"));
             }
+            log::info!("Match cleanup loop canceled.");
         });
+        handle.cancel_senders.push(cancel_tx);
+        handle.join_handles.push(j);
     }
     {
         let cfg = config.match_runner_config.clone();
         let man = man.clone();
-        tokio::task::spawn(async move {
+        let (cancel_tx, mut cancel_rx) = oneshot::channel();
+        let j = tokio::task::spawn(async move {
             loop {
                 let _ = crate::engine::choose_and_run_match(&db, man.clone(), &cfg)
                     .await
                     .inspect_err(|e| log::error!("{e:?}"));
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                tokio::select! {
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(2)) => {}
+                    Ok(()) = &mut cancel_rx => break
+                }
             }
+            log::info!("Match runner loop canceled.");
         });
+        handle.cancel_senders.push(cancel_tx);
+        handle.join_handles.push(j);
     }
 
     if let Some(manager::MatchDirCleanup { period, .. }) =
@@ -60,13 +98,21 @@ pub async fn start(
     {
         let period = *period;
         let man = man.clone();
-        tokio::task::spawn(async move {
+        let (cancel_tx, mut cancel_rx) = oneshot::channel();
+        let j = tokio::task::spawn(async move {
             loop {
                 let _ = man.cleanup_matches_iteration().await.inspect_err(|e| {
                     log::error!("Match dir cleanup failed: {e:?}");
                 });
-                tokio::time::sleep(period).await;
+                tokio::select! {
+                    _ = tokio::time::sleep(period) => {}
+                    Ok(()) = &mut cancel_rx => break
+                }
             }
+            log::info!("Match dir cleanup loop canceled.");
         });
+        handle.join_handles.push(j);
+        handle.cancel_senders.push(cancel_tx);
     }
+    handle
 }

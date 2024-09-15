@@ -4,7 +4,7 @@ use actix_web::{HttpRequest, HttpResponse, Responder};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 
-use crate::db;
+use proglad_db as db;
 use crate::http_types::*;
 use crate::server_state::*;
 
