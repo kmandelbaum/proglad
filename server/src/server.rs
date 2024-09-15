@@ -27,8 +27,9 @@ use crate::scheduler;
 use crate::server_state::*;
 
 pub struct Handle {
-    server: actix_web::dev::Server,
-    scheduler: scheduler::Handle,
+    pub server: actix_web::dev::Server,
+    pub scheduler: scheduler::Handle,
+    pub addrs: Vec<std::net::SocketAddr>,
 }
 
 pub async fn run(config: Config) -> anyhow::Result<()> {
@@ -41,14 +42,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     // the same process group.
     // For now this is acceptable trade-off, but sometimes containers can leak.
     log::info!("Canceling background processes with timeout {timeout:?}.");
-    let mut deadline = tokio::time::interval_at(tokio::time::Instant::now() + timeout, timeout);
-    let mut join_set = tokio::task::JoinSet::from_iter(handle.scheduler.join_handles);
-    loop {
-        tokio::select! {
-            _ = deadline.tick() => break,
-            next_result = join_set.join_next() => if next_result.is_none() { break; }
-        }
-    }
+    handle.scheduler.join(timeout).await;
     result?;
     Ok(())
 }
@@ -61,19 +55,24 @@ pub async fn create(config: Config) -> anyhow::Result<Handle> {
     let mut tmpl = handlebars::Handlebars::new();
     tmpl.set_strict_mode(true);
     tmpl.set_dev_mode(true);
-    tmpl.register_template_file("creatematch", "templates/creatematch.hbs")
+    let tf = |t: &str| -> std::path::PathBuf {
+        std::path::Path::new(&config.server_config.fs_root_dir)
+            .join("templates")
+            .join(format!("{t}.hbs"))
+    };
+    tmpl.register_template_file("creatematch", tf("creatematch"))
         .context("Failed to register creatematch template")?;
-    tmpl.register_template_file("games", "templates/games.hbs")
+    tmpl.register_template_file("games", tf("games"))
         .context("Failed to register games template")?;
-    tmpl.register_template_file("visualizer", "templates/visualizer.hbs")
+    tmpl.register_template_file("visualizer", tf("visualizer"))
         .context("Failed to register visualizer template")?;
-    tmpl.register_template_file("game", "templates/game.hbs")
+    tmpl.register_template_file("game", tf("game"))
         .context("Failed to register game template")?;
-    tmpl.register_template_file("bots", "templates/bots.hbs")
+    tmpl.register_template_file("bots", tf("bots"))
         .context("Failed to register bots template")?;
-    tmpl.register_template_file("matches", "templates/matches.hbs")
+    tmpl.register_template_file("matches", tf("matches"))
         .context("Failed to register matches")?;
-    tmpl.register_template_file("main", "templates/main.hbs")
+    tmpl.register_template_file("main", tf("main"))
         .context("Failed to register main template")?;
     let port = config.server_config.port;
 
@@ -105,12 +104,16 @@ pub async fn create(config: Config) -> anyhow::Result<Handle> {
             .service(get_bots)
             .service(get_matches)
             .service(get_source)
-            .service(actix_files::Files::new("/static", "static"))
+            .service(actix_files::Files::new(
+                "/static",
+                std::path::Path::new(&app_state.config.fs_root_dir).join("static"),
+            ))
     })
     .workers(8)
-    .bind(("::", port))?
-    .run(); // Does not actually run the server but creates a future.
-    Ok(Handle{ server, scheduler })
+    .bind(("::", port))?;
+    let addrs = server.addrs();
+    let server = server.run(); // Does not actually run the server but creates a future.
+    Ok(Handle { server, scheduler, addrs })
 }
 
 #[derive(Serialize)]
@@ -624,7 +627,6 @@ async fn get_game(req: HttpRequest, path: web::Path<i64>) -> HttpResult {
             log::error!("Failed to fetch bots stats for game {game_id} from db: {e:?}");
             AppHttpError::Internal
         })?;
-    log::info!("Stats={:?}", stats.len());
     let bots = HashMap::<i64, db::bots::Model>::from_iter(bots.into_iter().map(|b| (b.id, b)));
     let mut bot_scores = stats
         .iter()

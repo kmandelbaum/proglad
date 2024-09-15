@@ -13,6 +13,7 @@ pub type ProgramId = i64;
 
 #[derive(Clone, Deserialize, Debug, Serialize)]
 pub struct Config {
+    pub container_name_prefix: String,
     pub cache_dir: std::path::PathBuf,
     pub match_run_dir: std::path::PathBuf,
     pub template_dir: std::collections::HashMap<Language, std::path::PathBuf>,
@@ -255,7 +256,10 @@ impl Manager {
                 .context("Failed to write out source file to compilation cache")?;
             return Ok(());
         }
-        let container_name = format!("proglad-compile-{}", program.id);
+        let container_name = format!(
+            "{}compile-{}",
+            self.config.container_name_prefix, program.id
+        );
         let compilation_command =
             format!("cd agent && {}", self.compilation_command(program.language));
         let mut command = tokio::process::Command::new("docker");
@@ -318,7 +322,8 @@ impl Manager {
             Language::Java => "Main.java",
             Language::Cpp => "main.cc",
             Language::Go => "main.go",
-        }.into()
+        }
+        .into()
     }
 
     fn needs_compilation(&self, language: Language) -> bool {
@@ -456,7 +461,10 @@ impl Manager {
     }
 
     fn container_id(&self, match_id: MatchId, player_index: usize) -> String {
-        format!("match-{match_id}-agent-{player_index}")
+        format!(
+            "{}match-{match_id}-agent-{player_index}",
+            self.config.container_name_prefix
+        )
     }
 
     async fn start_container(&self, container_name: &str, timeout: Duration) -> anyhow::Result<()> {

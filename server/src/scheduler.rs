@@ -8,13 +8,24 @@ use proglad_controller::manager;
 #[derive(Default)]
 pub struct Handle {
     cancel_senders: Vec<oneshot::Sender<()>>,
-    pub join_handles: Vec<tokio::task::JoinHandle<()>>,
+    join_handles: Vec<tokio::task::JoinHandle<()>>,
 }
 
 impl Handle {
     pub fn cancel(&mut self) {
         for sender in std::mem::take(&mut self.cancel_senders) {
             let _ = sender.send(());
+        }
+    }
+    pub async fn join(self, timeout: std::time::Duration) {
+        let mut deadline = tokio::time::interval_at(
+            tokio::time::Instant::now() + timeout, timeout);
+        let mut join_set = tokio::task::JoinSet::from_iter(self.join_handles);
+        loop {
+            tokio::select! {
+                _ = deadline.tick() => break,
+                next_result = join_set.join_next() => if next_result.is_none() { break; }
+            }
         }
     }
 }

@@ -218,7 +218,7 @@ fn pick_num_players(game: &db::games::Model, available_players: usize) -> anyhow
     }
     if num_players == 0 {
         log::warn!(
-            "Unusual : num_players=0. Check game config for game {}",
+            "Unusual: num_players=0. Check game config for game {}",
             game.id
         );
     }
@@ -716,7 +716,7 @@ struct IdResult {
 
 #[derive(FromQueryResult, Debug)]
 struct TimeResult {
-    time: TimeDateTimeWithTimeZone,
+    time: Option<TimeDateTimeWithTimeZone>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -758,7 +758,7 @@ pub async fn cleanup_matches_batch<C: ConnectionTrait>(
             sql,
             [game_id.into(), config.keep_matches_per_game.into()],
         );
-        let Some(TimeResult { time: threshold }) = TimeResult::find_by_statement(stmt)
+        let threshold_query_result = TimeResult::find_by_statement(stmt)
             .one(db)
             .await
             .map_err(|e| MyDbError {
@@ -766,8 +766,8 @@ pub async fn cleanup_matches_batch<C: ConnectionTrait>(
                     "Failed to determine the cleanup end time threshold for game {game_id}"
                 ),
                 db_error: e,
-            })?
-        else {
+            })?;
+        let Some(TimeResult{ time: Some(threshold) }) = threshold_query_result else {
             log::info!("No matches found for game {game_id}, skipping cleanup.");
             continue;
         };

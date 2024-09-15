@@ -4,28 +4,42 @@ version = "0.1.0"
 authors = ["Konstantin Mandelbaum <submulticativity@gmail.com>"]
 edition = "2021"
 
+[features]
+integration_tests = []
+
 [dependencies]
-anyhow = "1.0.85"
-env_logger = "0.11.3"
-log = "0.4.21"
-sea-orm = { version = "0.12.15", features = ["sqlx-sqlite", "runtime-tokio"] }
-sqlx = { version = "0.7.4", features = ["sqlite", "runtime-tokio"] }
-tempfile = "3.10.1"
-tokio = { version = "1.37.0", features = ["macros", "rt", "rt-multi-thread", "process", "fs", "sync"] }
-proglad-controller = { path = "../controller" }
-actix-web = "4.8.0"
-derive_more = "0.99.18"
-handlebars = "5.1.2"
-serde = { version = "1.0.203", features = ["derive"] }
-mime = "0.3.17"
-sea-query = { version = "0.30.7", features = ["backend-sqlite"] }
-proglad-db = { path = "db" }
 actix-files = "0.6.6"
-flate2 = "1.0.30"
 actix-multipart = "0.7.2"
 actix-session = { version = "0.9.0", features = ["cookie-session"] }
-time = { version = "0.3.36", features = ["macros"] }
-rand = "0.8.5"
+actix-web = "4.8.0"
+anyhow = "1.0.85"
+derive_more = "0.99.18"
+env_logger = "0.11.3"
+flate2 = "1.0.30"
+handlebars = "5.1.2"
+log = "0.4.21"
+mime = "0.3.17"
 ory-kratos-client = { version = "1.1.0" }
+proglad-controller = { path = "../controller" }
+proglad-db = { path = "db" }
+rand = "0.8.5"
 reqwest = "0.11.27"
+sea-orm = { version = "0.12.15", features = ["sqlx-sqlite", "runtime-tokio"] }
+sea-query = { version = "0.30.7", features = ["backend-sqlite"] }
+serde = { version = "1.0.203", features = ["derive"] }
+sqlx = { version = "0.7.4", features = ["sqlite", "runtime-tokio"] }
+tempfile = "3.10.1"
+time = { version = "0.3.36", features = ["macros"] }
+tokio = { version = "1.37.0", features = ["macros", "rt", "rt-multi-thread", "process", "fs", "sync"] }
 toml = "0.8.19"
+
+[dev-dependencies]
+proglad-migration = { path = "./migration" }
+tempdir = { version = "0.3.7" }
+
+[dev-dependencies.sea-orm-migration]
+version = "0.12.0"
+features = [
+  "runtime-tokio-rustls",
+  "sqlx-sqlite",
+]

@@ -6,6 +6,8 @@ pub struct ServerConfig {
     pub site_base_url_path: String,
     pub auth_base_url: String,
     pub kratos_api_url: String,
+    #[serde(default)]
+    pub fs_root_dir: std::path::PathBuf,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
