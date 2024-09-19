@@ -39,9 +39,9 @@ impl std::fmt::Display for MyDbError {
 
 impl std::error::Error for MyDbError {}
 
-pub async fn ensure_compiled(
+pub async fn ensure_compiled<C: ConnectionTrait + TransactionTrait>(
     man: &manager::Manager,
-    db: &DatabaseConnection,
+    db: &C,
     program_id: i64,
 ) -> anyhow::Result<()> {
     let cached = man.is_program_cached(program_id).await;
@@ -90,9 +90,9 @@ pub async fn choose_and_compile_program(db: &DatabaseConnection, man: &manager::
     true
 }
 
-pub async fn run_match(
+pub async fn run_match<C: ConnectionTrait + TransactionTrait>(
     man: Arc<manager::Manager>,
-    db: &DatabaseConnection,
+    db: &C,
     bots: &[i64],
     config: &match_runner::Config,
 ) -> anyhow::Result<()> {
@@ -143,7 +143,11 @@ pub async fn run_match(
             .collect::<Vec<_>>()
     });
     let num_bots = bots.len();
-    let ret = match_result.result.as_ref().map_err(|e| anyhow!("{e:?}")).map(|_| ());
+    let ret = match_result
+        .result
+        .as_ref()
+        .map_err(|e| anyhow!("{e:?}"))
+        .map(|_| ());
     db.transaction(|txn| {
         Box::pin(async move {
             let _ = db_update_match_result(txn, match_id, num_bots, match_result)
@@ -225,25 +229,20 @@ fn pick_num_players(game: &db::games::Model, available_players: usize) -> anyhow
     Ok(num_players as usize)
 }
 
-async fn choose_match(db: &DatabaseConnection) -> anyhow::Result<Vec<i64>> {
-    // Scaling NOTE: everything is done in one go, assuming all games, bots and matches can be
-    // processed at once. When hitting scaling issues, this should be split per-game, as
-    // those are completely independent. Within each game, if there are too many bots, those
-    // can be split either by leagues or rooms. Leagues are probably preferred, as we
-    // want similarly strong bots to be paired against each other.
-
-    let game_id = select_active_game(db).await?;
+async fn choose_match_for_game<C: ConnectionTrait>(
+    db: &C,
+    game_id: i64,
+) -> anyhow::Result<Vec<i64>> {
     let Some(game) = db::games::Entity::find_by_id(game_id)
         .one(db)
         .await
-        .context("choose_and_run_match: Failed to read game data for game {game_id}")?
+        .context("choose_match_for_game: Failed to read game data for game {game_id}")?
     else {
         return Err(anyhow!(
             "There is no game with id {game_id} which was selected as active"
         ));
     };
 
-    log::info!("Selected game {game_id} to run next match");
     let active_bots = db::bots::Entity::find()
         .filter(
             Condition::all()
@@ -253,7 +252,7 @@ async fn choose_match(db: &DatabaseConnection) -> anyhow::Result<Vec<i64>> {
         )
         .all(db)
         .await
-        .context("choose_and_run_match: Failed to find active bots: {e:?}")?;
+        .context("choose_match_for_game: Failed to find active bots")?;
     let mut active_bot_ids: Vec<i64> = active_bots.iter().map(|b| b.id).collect();
     let participations = db::match_participations::Entity::find()
         .filter(db::match_participations::Column::BotId.is_in(active_bot_ids.iter().copied()))
@@ -313,6 +312,18 @@ async fn choose_match(db: &DatabaseConnection) -> anyhow::Result<Vec<i64>> {
     selected_players.shuffle(&mut rng);
     log::info!("Will run game {game_id} with players {selected_players:?}");
     Ok(selected_players)
+}
+
+async fn choose_match(db: &DatabaseConnection) -> anyhow::Result<Vec<i64>> {
+    // Scaling NOTE: everything is done in one go, assuming all games, bots and matches can be
+    // processed at once. When hitting scaling issues, this should be split per-game, as
+    // those are completely independent. Within each game, if there are too many bots, those
+    // can be split either by leagues or rooms. Leagues are probably preferred, as we
+    // want similarly strong bots to be paired against each other.
+
+    let game_id = select_active_game(db).await?;
+    log::info!("Selected game {game_id} to run next match");
+    choose_match_for_game(db, game_id).await
 }
 
 pub async fn create_bot<C: ConnectionTrait>(
@@ -656,6 +667,7 @@ async fn compile_impl<C: ConnectionTrait + TransactionTrait>(
     db: &C,
     program: db::programs::Model,
 ) -> anyhow::Result<()> {
+    log::info!("Compiling program {} in {:?}", program.id, program.language);
     let writeback = db::programs::ActiveModel {
         id: Set(program.id),
         status: Set(db::programs::Status::Compiling),
@@ -758,16 +770,20 @@ pub async fn cleanup_matches_batch<C: ConnectionTrait>(
             sql,
             [game_id.into(), config.keep_matches_per_game.into()],
         );
-        let threshold_query_result = TimeResult::find_by_statement(stmt)
-            .one(db)
-            .await
-            .map_err(|e| MyDbError {
-                context: format!(
-                    "Failed to determine the cleanup end time threshold for game {game_id}"
-                ),
-                db_error: e,
-            })?;
-        let Some(TimeResult{ time: Some(threshold) }) = threshold_query_result else {
+        let threshold_query_result =
+            TimeResult::find_by_statement(stmt)
+                .one(db)
+                .await
+                .map_err(|e| MyDbError {
+                    context: format!(
+                        "Failed to determine the cleanup end time threshold for game {game_id}"
+                    ),
+                    db_error: e,
+                })?;
+        let Some(TimeResult {
+            time: Some(threshold),
+        }) = threshold_query_result
+        else {
             log::info!("No matches found for game {game_id}, skipping cleanup.");
             continue;
         };
@@ -800,4 +816,205 @@ pub async fn cleanup_matches_batch<C: ConnectionTrait>(
         log::info!("Deleted {} matches for game {game_id}", res.rows_affected);
     }
     Ok(())
+}
+
+pub async fn scheduling_round<C: ConnectionTrait>(
+    db: &C,
+    config: &crate::scheduler::Config,
+) -> anyhow::Result<()> {
+    let scheduled_work = db::work_items::Entity::find()
+        .filter(db::work_items::Column::Status.eq(db::work_items::Status::Scheduled))
+        .all(db)
+        .await
+        .context("Could not fetch the existing scheduled work items.")?;
+    if scheduled_work.len() >= config.max_scheduled_work_items {
+        log::info!("Enough work is scheduled, skipping scheduling round");
+        return Ok(());
+    }
+    let active_games: Vec<i64> = db::games::Entity::find()
+        .filter(db::games::Column::Status.eq(db::games::Status::Active))
+        .select_only()
+        .column(db::games::Column::Id)
+        .into_values::<i64, db::games::Column>()
+        .all(db)
+        .await
+        .context("Failed to fetch active games")?;
+    if active_games.is_empty() {
+        log::info!("No active games found, skipping scheduling round.");
+        return Ok(());
+    }
+    for game_id in active_games {
+        let _ = schedule_match_for_game(db, game_id, config.match_run_default_priority)
+            .await
+            .inspect_err(|e| {
+                log::error!("Failed to schedule match for game {game_id}: {e:?}");
+            });
+    }
+
+    let scheduled_compilation_program_ids = scheduled_work.iter().filter_map(|w| {
+        if w.work_type == db::work_items::WorkType::Compilation {
+            w.program_id
+        } else {
+            None
+        }
+    });
+
+    let Ok(programs) = db::programs::Entity::find()
+        .filter(db::programs::Column::Status.eq(db::programs::Status::New))
+        .filter(db::programs::Column::Id.is_not_in(scheduled_compilation_program_ids))
+        .order_by_asc(db::programs::Column::StatusUpdateTime)
+        .select_only()
+        .column(db::programs::Column::Id)
+        .into_values::<i64, db::programs::Column>()
+        .all(db)
+        .await
+        .inspect_err(|e| log::error!("Failed to query for program: {e:?}"))
+    else {
+        return Ok(());
+    };
+    for program_id in programs {
+        let _ = schedule_compilation(db, program_id, config.compilation_default_priority)
+            .await
+            .inspect_err(|e| {
+                log::error!("Failed to schedule compilation: {e:?}");
+            });
+    }
+    Ok(())
+}
+
+async fn schedule_match_for_game<C: ConnectionTrait>(
+    db: &C,
+    game_id: i64,
+    priority: i64,
+) -> anyhow::Result<()> {
+    let now = TimeDateTimeWithTimeZone::now_utc();
+    let work_item = db::work_items::ActiveModel {
+        game_id: Set(Some(game_id)),
+        creation_time: Set(now),
+        work_type: Set(db::work_items::WorkType::RunMatch),
+        status: Set(db::work_items::Status::Scheduled),
+        priority: Set(priority),
+        ..Default::default()
+    };
+    db::work_items::Entity::insert(work_item)
+        .exec(db)
+        .await
+        .context(format!(
+            "Failed to insert work item for running the game for game {game_id}"
+        ))?;
+    Ok(())
+}
+
+async fn schedule_compilation<C: ConnectionTrait>(
+    db: &C,
+    program_id: i64,
+    priority: i64,
+) -> anyhow::Result<()> {
+    let now = TimeDateTimeWithTimeZone::now_utc();
+    let work_item = db::work_items::ActiveModel {
+        program_id: Set(Some(program_id)),
+        creation_time: Set(now),
+        work_type: Set(db::work_items::WorkType::Compilation),
+        status: Set(db::work_items::Status::Scheduled),
+        priority: Set(priority),
+        ..Default::default()
+    };
+    db::work_items::Entity::insert(work_item)
+        .exec(db)
+        .await
+        .context(format!(
+            "Failed to insert work item for compiling program {program_id}"
+        ))?;
+    Ok(())
+}
+
+pub async fn select_and_run_work_item<C: ConnectionTrait + TransactionTrait>(
+    db: &C,
+    man: Arc<manager::Manager>,
+    match_runner_config: &match_runner::Config,
+) -> anyhow::Result<()> {
+    let work_item = db
+        .transaction(|txn| {
+            Box::pin(async move {
+                let best_work_items = db::work_items::Entity::find()
+                    .filter(db::work_items::Column::Status.eq(db::work_items::Status::Scheduled))
+                    .order_by(db::work_items::Column::Priority, sea_orm::Order::Desc)
+                    .order_by(db::work_items::Column::CreationTime, sea_orm::Order::Asc)
+                    .limit(1)
+                    .all(txn)
+                    .await
+                    .map_err(|e| MyDbError {
+                        context: "Failed to fetch best work items to execute".to_owned(),
+                        db_error: e,
+                    })?;
+                let Some(best_item) = best_work_items.into_iter().next() else {
+                    return Ok::<_, MyDbError>(None);
+                };
+                let now = TimeDateTimeWithTimeZone::now_utc();
+                let writeback = db::work_items::ActiveModel {
+                    id: Set(best_item.id),
+                    status: Set(db::work_items::Status::Started),
+                    start_time: Set(Some(now)),
+                    ..Default::default()
+                };
+                db::work_items::Entity::update(writeback)
+                    .exec(txn)
+                    .await
+                    .map_err(|e| MyDbError {
+                        context: format!("Failed to update work item {}", best_item.id),
+                        db_error: e,
+                    })?;
+                Ok(Some(best_item))
+            })
+        })
+        .await
+        .context("Transaction failed")?;
+    let Some(work_item) = work_item else {
+        log::info!("No scheduled work found.");
+        return Ok(());
+    };
+    let work_item_id = work_item.id;
+    let res = run_work_item(db, man, work_item, match_runner_config).await;
+    let status = if res.is_ok() {
+        db::work_items::Status::Completed
+    } else {
+        db::work_items::Status::Failed
+    };
+
+    let now = TimeDateTimeWithTimeZone::now_utc();
+    let writeback = db::work_items::ActiveModel {
+        id: Set(work_item_id),
+        status: Set(status),
+        end_time: Set(Some(now)),
+        ..Default::default()
+    };
+    db::work_items::Entity::update(writeback)
+        .exec(db)
+        .await
+        .context(format!("Failed to update work item {work_item_id}"))?;
+    Ok(())
+}
+
+async fn run_work_item<C: ConnectionTrait + TransactionTrait>(
+    db: &C,
+    man: Arc<manager::Manager>,
+    work_item: db::work_items::Model,
+    match_runner_config: &match_runner::Config,
+) -> anyhow::Result<()> {
+    match work_item.work_type {
+        db::work_items::WorkType::RunMatch => {
+            let Some(game_id) = work_item.game_id else {
+                return Err(anyhow!("No game_id in RunMatch work item."));
+            };
+            let selected_players = choose_match_for_game(db, game_id).await?;
+            // TODO: propagate the match id into work_items.
+            run_match(man, db, &selected_players, match_runner_config).await
+        }
+        db::work_items::WorkType::Compilation => {
+            let Some(program_id) = work_item.program_id else {
+                return Err(anyhow!("No program_id in Compilation work item."));
+            };
+            ensure_compiled(man.as_ref(), db, program_id).await
+        }
+    }
 }

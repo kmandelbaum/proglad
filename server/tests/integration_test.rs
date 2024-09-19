@@ -40,8 +40,11 @@ mod tests {
         };
         let scheduler_config = proglad_server::scheduler::Config {
             enabled: true,
-            compilation_check_period: Some(std::time::Duration::from_secs(1)),
-            match_cleanup_check_period: Some(std::time::Duration::from_secs(5)),
+            scheduler_run_period: Some(std::time::Duration::from_millis(500)),
+            match_cleanup_check_period: Some(std::time::Duration::from_secs(2)),
+            max_scheduled_work_items: 5,
+            match_run_default_priority: 1000,
+            compilation_default_priority: 1500,
         };
         let cleanup_config = proglad_server::engine::CleanupConfig {
             keep_matches_per_game: 5,

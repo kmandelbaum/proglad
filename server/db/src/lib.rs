@@ -7,3 +7,4 @@ pub mod programs;
 pub mod matches;
 pub mod match_participations;
 pub mod stats_history;
+pub mod work_items;

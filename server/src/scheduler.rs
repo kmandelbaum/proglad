@@ -33,8 +33,11 @@ impl Handle {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
     pub enabled: bool,
-    pub compilation_check_period: Option<std::time::Duration>,
+    pub scheduler_run_period: Option<std::time::Duration>,
     pub match_cleanup_check_period: Option<std::time::Duration>,
+    pub max_scheduled_work_items: usize,
+    pub match_run_default_priority: i64,
+    pub compilation_default_priority: i64,
 }
 
 pub async fn start(
@@ -47,23 +50,46 @@ pub async fn start(
         log::info!("Scheduler is disabled.");
         return handle;
     }
-    if let Some(compilation_period) = config.scheduler_config.compilation_check_period {
-        let (db, man) = (db.clone(), man.clone());
+    {
+        let man = man.clone();
+        let db = db.clone();
+        let cfg = config.match_runner_config.clone();
         let (cancel_tx, mut cancel_rx) = oneshot::channel();
-        tokio::task::spawn(async move {
+        let j = tokio::task::spawn(async move {
             loop {
-                if !crate::engine::choose_and_compile_program(&db, &man).await {
-                    tokio::select! {
-                        _ = tokio::time::sleep(compilation_period) => {}
-                        Ok(()) = &mut cancel_rx => { break; }
-                    }
-                } else if cancel_rx.try_recv().is_ok() {
-                        break;
+                let _ = crate::engine::select_and_run_work_item(&db, man.clone(), &cfg)
+                    .await
+                    .inspect_err(|e| log::error!("{e:?}"));
+                // Give the server a bit of a break.
+                // TODO: remove sleep.
+                tokio::select! {
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
+                    Ok(()) = &mut cancel_rx => break
                 }
             }
-            log::info!("Compilation loop canceled.");
+            log::info!("Match runner loop canceled.");
         });
         handle.cancel_senders.push(cancel_tx);
+        handle.join_handles.push(j);
+    }
+    if let Some(period) = config.scheduler_config.scheduler_run_period {
+        let db = db.clone();
+        let cfg = config.scheduler_config.clone();
+        let (cancel_tx, mut cancel_rx) = oneshot::channel();
+        let j = tokio::task::spawn(async move {
+            loop {
+                let _ = crate::engine::scheduling_round(&db, &cfg)
+                    .await
+                    .inspect_err(|e| log::error!("{e:?}"));
+                tokio::select! {
+                    _ = tokio::time::sleep(period) => {}
+                    Ok(()) = &mut cancel_rx => break
+                }
+            }
+            log::info!("Match runner loop canceled.");
+        });
+        handle.cancel_senders.push(cancel_tx);
+        handle.join_handles.push(j);
     }
     if let Some(cleanup_period) = config.scheduler_config.match_cleanup_check_period {
         let db = db.clone();
@@ -84,26 +110,6 @@ pub async fn start(
         handle.cancel_senders.push(cancel_tx);
         handle.join_handles.push(j);
     }
-    {
-        let cfg = config.match_runner_config.clone();
-        let man = man.clone();
-        let (cancel_tx, mut cancel_rx) = oneshot::channel();
-        let j = tokio::task::spawn(async move {
-            loop {
-                let _ = crate::engine::choose_and_run_match(&db, man.clone(), &cfg)
-                    .await
-                    .inspect_err(|e| log::error!("{e:?}"));
-                tokio::select! {
-                    _ = tokio::time::sleep(std::time::Duration::from_secs(2)) => {}
-                    Ok(()) = &mut cancel_rx => break
-                }
-            }
-            log::info!("Match runner loop canceled.");
-        });
-        handle.cancel_senders.push(cancel_tx);
-        handle.join_handles.push(j);
-    }
-
     if let Some(manager::MatchDirCleanup { period, .. }) =
         config.manager_config.match_dir_cleanup.as_ref()
     {
