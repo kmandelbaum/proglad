@@ -3,8 +3,8 @@ use rand::{seq::SliceRandom, Rng};
 use sea_orm::prelude::TimeDateTimeWithTimeZone;
 use sea_orm::FromQueryResult;
 use sea_orm::{
-    ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, DbErr, EntityTrait, JoinType,
-    QueryFilter, QueryOrder, QuerySelect, QueryTrait, RelationTrait, Set, TransactionTrait,
+    ColumnTrait, Condition, ConnectionTrait, DbErr, EntityTrait,
+    QueryFilter, QueryOrder, QuerySelect, QueryTrait, Set, TransactionTrait,
 };
 use sea_query::Expr;
 use serde::{Deserialize, Serialize};
@@ -70,24 +70,6 @@ pub async fn ensure_compiled<C: ConnectionTrait + TransactionTrait>(
         );
     }
     compile_impl(man, db, program).await
-}
-
-pub async fn choose_and_compile_program(db: &DatabaseConnection, man: &manager::Manager) -> bool {
-    let Ok(programs) = db::programs::Entity::find()
-        .filter(db::programs::Column::Status.eq(db::programs::Status::New))
-        .order_by_asc(db::programs::Column::StatusUpdateTime)
-        .limit(1)
-        .all(db)
-        .await
-        .inspect_err(|e| log::error!("Failed to query for program: {e:?}"))
-    else {
-        return false;
-    };
-    let Some(program) = programs.into_iter().next() else {
-        return false;
-    };
-    let _ = compile_impl(man, db, program).await;
-    true
 }
 
 pub async fn run_match<C: ConnectionTrait + TransactionTrait>(
@@ -170,35 +152,6 @@ pub async fn run_match<C: ConnectionTrait + TransactionTrait>(
     .context("Transaction failed")?;
     log::info!("Match {match_id} result: {ret:?}");
     ret
-}
-
-async fn select_active_game(db: &DatabaseConnection) -> anyhow::Result<i64> {
-    let active_games: Vec<(i64, Option<TimeDateTimeWithTimeZone>)> = db::games::Entity::find()
-        .filter(db::games::Column::Status.eq(db::games::Status::Active))
-        .join(JoinType::LeftJoin, db::games::Relation::Matches.def())
-        .select_only()
-        .column(db::games::Column::Id)
-        .column_as(db::matches::Column::EndTime.max(), "max_time")
-        .group_by(db::games::Column::Id)
-        .order_by_asc(sea_query::Expr::cust("max_time"))
-        .limit(1)
-        .into_tuple()
-        .all(db)
-        .await
-        .context("select_active_game: Failed to fetch active games")?;
-    let Some((game_id, _)) = active_games.into_iter().next() else {
-        return Err(anyhow!("No active games"));
-    };
-    Ok(game_id)
-}
-
-pub async fn choose_and_run_match(
-    db: &DatabaseConnection,
-    man: Arc<manager::Manager>,
-    config: &match_runner::Config,
-) -> anyhow::Result<()> {
-    let selected_players = choose_match(db).await?;
-    run_match(man, db, &selected_players, config).await
 }
 
 fn pick_num_players(game: &db::games::Model, available_players: usize) -> anyhow::Result<usize> {
@@ -312,18 +265,6 @@ async fn choose_match_for_game<C: ConnectionTrait>(
     selected_players.shuffle(&mut rng);
     log::info!("Will run game {game_id} with players {selected_players:?}");
     Ok(selected_players)
-}
-
-async fn choose_match(db: &DatabaseConnection) -> anyhow::Result<Vec<i64>> {
-    // Scaling NOTE: everything is done in one go, assuming all games, bots and matches can be
-    // processed at once. When hitting scaling issues, this should be split per-game, as
-    // those are completely independent. Within each game, if there are too many bots, those
-    // can be split either by leagues or rooms. Leagues are probably preferred, as we
-    // want similarly strong bots to be paired against each other.
-
-    let game_id = select_active_game(db).await?;
-    log::info!("Selected game {game_id} to run next match");
-    choose_match_for_game(db, game_id).await
 }
 
 pub async fn create_bot<C: ConnectionTrait>(
