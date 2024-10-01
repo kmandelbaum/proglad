@@ -5,4 +5,5 @@ authors = ["Konstantin Mandelbaum <submulticativity@gmail.com>"]
 edition = "2021"
 
 [dependencies]
+flate2 = "1.0.30"
 sea-orm = "0.12.15"

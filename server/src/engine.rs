@@ -3,8 +3,8 @@ use rand::{seq::SliceRandom, Rng};
 use sea_orm::prelude::TimeDateTimeWithTimeZone;
 use sea_orm::FromQueryResult;
 use sea_orm::{
-    ColumnTrait, Condition, ConnectionTrait, DbErr, EntityTrait,
-    QueryFilter, QueryOrder, QuerySelect, QueryTrait, Set, TransactionTrait,
+    ColumnTrait, Condition, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QueryOrder,
+    QuerySelect, QueryTrait, Set, TransactionTrait,
 };
 use sea_query::Expr;
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
+use crate::file_store::{self, FileStore};
 use proglad_controller::{manager, match_runner};
 use proglad_db as db;
 
@@ -39,9 +40,10 @@ impl std::fmt::Display for MyDbError {
 
 impl std::error::Error for MyDbError {}
 
-pub async fn ensure_compiled<C: ConnectionTrait + TransactionTrait>(
+async fn ensure_compiled<C: ConnectionTrait + TransactionTrait>(
     man: &manager::Manager,
     db: &C,
+    file_store: &FileStore,
     program_id: i64,
 ) -> anyhow::Result<()> {
     let cached = man.is_program_cached(program_id).await;
@@ -69,12 +71,13 @@ pub async fn ensure_compiled<C: ConnectionTrait + TransactionTrait>(
             "Program {program_id} is marked compiled in the database but is absent in the cache; recompiling.",
         );
     }
-    compile_impl(man, db, program).await
+    compile_impl(man, db, file_store, program).await
 }
 
 pub async fn run_match<C: ConnectionTrait + TransactionTrait>(
     man: Arc<manager::Manager>,
     db: &C,
+    file_store: &FileStore,
     bots: &[i64],
     config: &match_runner::Config,
 ) -> anyhow::Result<()> {
@@ -104,7 +107,7 @@ pub async fn run_match<C: ConnectionTrait + TransactionTrait>(
 
     // TODO: parallel compilation
     for a in agents.iter() {
-        ensure_compiled(&man, db, a.id).await?;
+        ensure_compiled(&man, db, file_store, a.id).await?;
     }
     // TODO: manage configuration properly.
     let config = manager::MatchConfig {
@@ -269,19 +272,20 @@ async fn choose_match_for_game<C: ConnectionTrait>(
 
 pub async fn create_bot<C: ConnectionTrait>(
     db: &C,
+    file_store: &FileStore,
     game_id: i64,
     owner_id: i64,
     source_path: impl AsRef<Path>,
     language: db::programs::Language,
     name: &str,
 ) -> anyhow::Result<i64> {
-    let source_code = tokio::fs::read_to_string(source_path)
+    let source_code = tokio::fs::read(source_path)
         .await
         .context("Failed to read source tempfile")?;
+    std::str::from_utf8(&source_code).context("Incorrect encoding of the source code file")?;
     let now = TimeDateTimeWithTimeZone::now_utc();
     let program = db::programs::ActiveModel {
         language: Set(language),
-        source_code: Set(Some(source_code)),
         status: Set(db::programs::Status::New),
         status_update_time: Set(now),
         ..Default::default()
@@ -291,6 +295,19 @@ pub async fn create_bot<C: ConnectionTrait>(
         .await
         .context("Failed to insert program by account {owner_id} for game {game_id}")?
         .last_insert_id;
+    let file = db::files::Model {
+        owning_entity: db::files::OwningEntity::Program,
+        owning_id: Some(program_id),
+        content: Some(source_code),
+        kind: db::files::Kind::SourceCode,
+        content_type: db::files::ContentType::PlainText,
+        ..Default::default()
+    };
+    let file = FileStore::compress(file).context("Failed to compress")?;
+    file_store
+        .write(db, file_store::Requester::System, file)
+        .await
+        .context("Failed to write source code file")?;
 
     let bot = db::bots::ActiveModel {
         name: Set(name.to_owned()),
@@ -606,6 +623,7 @@ fn make_param(data: &DbMatchData) -> String {
 async fn compile_impl<C: ConnectionTrait + TransactionTrait>(
     man: &manager::Manager,
     db: &C,
+    file_store: &FileStore,
     program: db::programs::Model,
 ) -> anyhow::Result<()> {
     log::info!("Compiling program {} in {:?}", program.id, program.language);
@@ -622,9 +640,10 @@ async fn compile_impl<C: ConnectionTrait + TransactionTrait>(
             "Failed to write back compilation status for program {}",
             program.id
         ))?;
-    let source_code = program
-        .source_code
-        .ok_or_else(|| anyhow!("Program {} has no source code", program.id))?;
+    let source_code = match program.source_code {
+        Some(src) => src.into_bytes(),
+        None => read_source_code(file_store, db, program.id).await?,
+    };
     let compilation_status = man
         .compile(manager::Program {
             id: program.id,
@@ -871,6 +890,7 @@ async fn schedule_compilation<C: ConnectionTrait>(
 
 pub async fn select_and_run_work_item<C: ConnectionTrait + TransactionTrait>(
     db: &C,
+    file_store: &FileStore,
     man: Arc<manager::Manager>,
     match_runner_config: &match_runner::Config,
 ) -> anyhow::Result<()> {
@@ -915,7 +935,7 @@ pub async fn select_and_run_work_item<C: ConnectionTrait + TransactionTrait>(
         return Ok(());
     };
     let work_item_id = work_item.id;
-    let res = run_work_item(db, man, work_item, match_runner_config).await;
+    let res = run_work_item(db, file_store, man, work_item, match_runner_config).await;
     let status = if res.is_ok() {
         db::work_items::Status::Completed
     } else {
@@ -938,6 +958,7 @@ pub async fn select_and_run_work_item<C: ConnectionTrait + TransactionTrait>(
 
 async fn run_work_item<C: ConnectionTrait + TransactionTrait>(
     db: &C,
+    file_store: &FileStore,
     man: Arc<manager::Manager>,
     work_item: db::work_items::Model,
     match_runner_config: &match_runner::Config,
@@ -949,13 +970,38 @@ async fn run_work_item<C: ConnectionTrait + TransactionTrait>(
             };
             let selected_players = choose_match_for_game(db, game_id).await?;
             // TODO: propagate the match id into work_items.
-            run_match(man, db, &selected_players, match_runner_config).await
+            run_match(man, db, file_store, &selected_players, match_runner_config).await
         }
         db::work_items::WorkType::Compilation => {
             let Some(program_id) = work_item.program_id else {
                 return Err(anyhow!("No program_id in Compilation work item."));
             };
-            ensure_compiled(man.as_ref(), db, program_id).await
+            ensure_compiled(man.as_ref(), db, file_store, program_id).await
         }
     }
+}
+
+pub async fn read_source_code<C: ConnectionTrait>(
+    file_store: &FileStore,
+    db: &C,
+    program_id: i64,
+) -> anyhow::Result<Vec<u8>> {
+    let file = file_store
+        .read(
+            db,
+            file_store::Requester::System,
+            db::files::OwningEntity::Program,
+            Some(program_id),
+            "",
+        )
+        .await
+        .context(format!(
+            "Failed to read source code for program {}",
+            program_id
+        ))?;
+    let file = FileStore::decompress(file).context(format!(
+        "Failed to decompress source code for program {}",
+        program_id
+    ))?;
+    file.content.ok_or(anyhow!("File content missing"))
 }

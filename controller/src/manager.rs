@@ -54,7 +54,7 @@ pub struct Agent {
 pub struct Program {
     pub id: ProgramId,
     pub language: Language,
-    pub source_code: String,
+    pub source_code: Vec<u8>,
 }
 
 #[derive(Debug)]

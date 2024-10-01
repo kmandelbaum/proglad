@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::oneshot;
 
+use crate::file_store::FileStore;
 use proglad_controller::manager;
 
 #[derive(Default)]
@@ -18,8 +19,7 @@ impl Handle {
         }
     }
     pub async fn join(self, timeout: std::time::Duration) {
-        let mut deadline = tokio::time::interval_at(
-            tokio::time::Instant::now() + timeout, timeout);
+        let mut deadline = tokio::time::interval_at(tokio::time::Instant::now() + timeout, timeout);
         let mut join_set = tokio::task::JoinSet::from_iter(self.join_handles);
         loop {
             tokio::select! {
@@ -42,6 +42,7 @@ pub struct Config {
 
 pub async fn start(
     db: DatabaseConnection,
+    file_store: FileStore,
     man: Arc<manager::Manager>,
     config: &crate::config::Config,
 ) -> Handle {
@@ -53,13 +54,15 @@ pub async fn start(
     {
         let man = man.clone();
         let db = db.clone();
+        let file_store = file_store.clone();
         let cfg = config.match_runner_config.clone();
         let (cancel_tx, mut cancel_rx) = oneshot::channel();
         let j = tokio::task::spawn(async move {
             loop {
-                let _ = crate::engine::select_and_run_work_item(&db, man.clone(), &cfg)
-                    .await
-                    .inspect_err(|e| log::error!("{e:?}"));
+                let _ =
+                    crate::engine::select_and_run_work_item(&db, &file_store, man.clone(), &cfg)
+                        .await
+                        .inspect_err(|e| log::error!("{e:?}"));
                 // Give the server a bit of a break.
                 // TODO: remove sleep.
                 tokio::select! {

@@ -12,7 +12,7 @@ fn idx<E: EntityTrait>(s: &sea_orm::Schema, e: E) -> Vec<IndexCreateStatement> {
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, m: &SchemaManager) -> Result<(), DbErr> {
-        let s = sea_orm::Schema::new(sea_orm::DatabaseBackend::Sqlite);
+        let s = sea_orm::Schema::new(m.get_database_backend());
         let mut create_table = s.create_table_from_entity(StatsHistory);
         create_table.if_not_exists();
         m.create_table(create_table).await?;

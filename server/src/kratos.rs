@@ -4,9 +4,9 @@ use actix_web::{HttpRequest, HttpResponse, Responder};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 
-use proglad_db as db;
 use crate::http_types::*;
 use crate::server_state::*;
+use proglad_db as db;
 
 #[derive(Deserialize, Debug)]
 pub struct AccountInfo {
@@ -95,10 +95,12 @@ pub async fn kratos_authenticate(
             log::error!("Failed to get account for e-mail {email}: {e:?}");
             AppHttpError::Internal
         })?;
-    let account = account.ok_or_else(||{
+    let account = account.ok_or_else(|| {
         let msg = format!("Email {email} not found in the database.");
         log::error!("{msg}");
-        AppHttpError::DetailedInternal { s: StringError(msg) }
+        AppHttpError::DetailedInternal {
+            s: StringError(msg),
+        }
     })?;
     let account_id = account.id;
     session.insert("account_id", account_id).map_err(|e| {
@@ -158,13 +160,11 @@ impl From<String> for HookResponse {
         Self {
             messages: vec![HookResponseMessage {
                 instance_ptr: "traits.username".to_owned(),
-                messages: vec![
-                    HookResponseDetailedMessage {
-                        id: 1,
-                        text: value,
-                        r#type: "error".to_owned(),
-                    }
-                ],
+                messages: vec![HookResponseDetailedMessage {
+                    id: 1,
+                    text: value,
+                    r#type: "error".to_owned(),
+                }],
             }],
         }
     }
@@ -187,7 +187,9 @@ fn kratos_config(
     req: &HttpRequest,
 ) -> Result<ory_kratos_client::apis::configuration::Configuration, AppHttpError> {
     let mut kratos_config = ory_kratos_client::apis::configuration::Configuration::new();
-    kratos_config.base_path.clone_from(&server_state(req)?.config.kratos_api_url);
+    kratos_config
+        .base_path
+        .clone_from(&server_state(req)?.config.kratos_api_url);
     let mut headers = reqwest::header::HeaderMap::default();
     headers.insert(
         actix_web::http::header::ACCEPT,

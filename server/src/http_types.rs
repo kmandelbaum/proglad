@@ -20,7 +20,7 @@ pub enum AppHttpError {
     Internal,
 
     #[display(fmt = "Internal error: {}", s)]
-    DetailedInternal{ s: StringError },
+    DetailedInternal { s: StringError },
 
     #[display(fmt = "Bad request.")]
     BadClientData,
@@ -38,7 +38,7 @@ pub enum AppHttpError {
     BotAlreadyExists,
 
     #[display(fmt = "Invalid bot name: {}", s)]
-    InvalidBotName{ s: StringError },
+    InvalidBotName { s: StringError },
 }
 
 impl actix_web::error::ResponseError for AppHttpError {
@@ -51,14 +51,13 @@ impl actix_web::error::ResponseError for AppHttpError {
     fn status_code(&self) -> StatusCode {
         match *self {
             AppHttpError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
-            AppHttpError::DetailedInternal{ .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            AppHttpError::DetailedInternal { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             AppHttpError::NotFound => StatusCode::NOT_FOUND,
             AppHttpError::BadClientData => StatusCode::BAD_REQUEST,
             AppHttpError::Unauthenticated => StatusCode::UNAUTHORIZED,
             AppHttpError::Unauthorized => StatusCode::UNAUTHORIZED,
             AppHttpError::BotAlreadyExists => StatusCode::CONFLICT,
-            AppHttpError::InvalidBotName{ .. } => StatusCode::BAD_REQUEST,
+            AppHttpError::InvalidBotName { .. } => StatusCode::BAD_REQUEST,
         }
     }
 }
-

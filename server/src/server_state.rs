@@ -8,6 +8,7 @@ pub struct ServerState<'a> {
     pub config: crate::config::ServerConfig,
     pub tmpl: handlebars::Handlebars<'a>,
     pub db: DatabaseConnection,
+    pub file_store: crate::file_store::FileStore,
 }
 
 pub fn server_state(req: &HttpRequest) -> Result<&ServerState, AppHttpError> {
@@ -16,4 +17,3 @@ pub fn server_state(req: &HttpRequest) -> Result<&ServerState, AppHttpError> {
         AppHttpError::Internal
     })
 }
-

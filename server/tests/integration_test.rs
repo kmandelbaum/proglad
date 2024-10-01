@@ -1,24 +1,40 @@
 #[cfg(feature = "integration_tests")]
 mod tests {
     use std::collections::HashSet;
+    use std::sync::Once;
 
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+    use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect, Set};
     use sea_orm_migration::MigratorTrait;
     use std::path::Path;
 
     use proglad_db as db;
+
+    static INIT: Once = Once::new();
+
+    pub fn initialize() {
+        INIT.call_once(|| {
+            env_logger::Builder::from_env(env_logger::Env::default())
+                .is_test(true)
+                .filter_module("sqlx", log::LevelFilter::Error)
+                .init();
+        });
+    }
 
     fn config(
         dir: impl AsRef<Path>,
         test_name: &str,
         db_path: &str,
     ) -> proglad_server::config::Config {
+        let access_control = proglad_server::config::AccessControl {
+            insecure_default_account: Some("km".to_owned()),
+        };
         let server_config = proglad_server::config::ServerConfig {
-            port: 0, // TODO: pick unused port for testing
+            port: 0, // pick an unused port
             site_base_url_path: "".to_owned(),
             auth_base_url: "".to_owned(),
             kratos_api_url: "".to_owned(),
             fs_root_dir: "".into(),
+            access_control,
         };
         let manager_config = proglad_controller::manager::Config {
             container_name_prefix: format!("{test_name}-"),
@@ -60,19 +76,22 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn server_smoke() {
-        env_logger::Builder::from_env(env_logger::Env::default())
-            .is_test(true)
-            .filter_module("sqlx", log::LevelFilter::Error)
-            .init();
+    struct Test {
+        #[allow(dead_code)] // RAII for the temp dir
+        dir: tempdir::TempDir,
+        db: DatabaseConnection,
+        config: proglad_server::config::Config,
+    }
+    async fn default_test_setup() -> Test {
+        initialize();
         let dir = tempdir::TempDir::new("proglad-test").expect("Failed to create test dir");
-        let path = dir.path();
+        let path = dir.path().to_owned();
         let test_name = path
             .file_name()
             .unwrap()
             .to_str()
-            .expect("Failed to extract basename from test dir");
+            .expect("Failed to extract basename from test dir")
+            .to_owned();
         let db_url = format!("sqlite://{}/db.sqlite?mode=rwc", path.to_str().unwrap());
         let db = sea_orm::Database::connect(&db_url)
             .await
@@ -89,25 +108,36 @@ mod tests {
         migration::Migrator::up(&db, None)
             .await
             .expect("Applying initial DB migrations failed");
+        let config = config(&path, &test_name, &db_url);
+        Test { dir, db, config }
+    }
 
+    #[tokio::test]
+    async fn server_smoke() {
+        let t = default_test_setup().await;
         let bot_ids: Vec<i64> = db::bots::Entity::find()
             .select_only()
             .column(db::bots::Column::Id)
             .into_values::<i64, db::bots::Column>()
-            .all(&db)
+            .all(&t.db)
             .await
             .expect("Failed to get bots IDs from DB");
 
-        let config = config(path, test_name, &db_url);
-        tokio::fs::create_dir_all(&config.manager_config.cache_dir)
+        assert!(
+            bot_ids.len() >= 3,
+            "Expected at least 3 bots in default setup, found: {}",
+            bot_ids.len()
+        );
+
+        tokio::fs::create_dir_all(&t.config.manager_config.cache_dir)
             .await
             .expect("Failed to create compilation cache dir");
-        tokio::fs::create_dir_all(&config.manager_config.match_run_dir)
+        tokio::fs::create_dir_all(&t.config.manager_config.match_run_dir)
             .await
             .expect("Failed to create match run dir");
         let timeout = std::time::Duration::from_secs(120);
         log::info!("Running the server for {timeout:?}");
-        let mut handle = proglad_server::server::create(config)
+        let mut handle = proglad_server::server::create(t.config)
             .await
             .expect("Failed to create the server");
         let server_handle = handle.server.handle();
@@ -126,7 +156,7 @@ mod tests {
 
         // Check that database state is sane.
         let matches = db::matches::Entity::find()
-            .all(&db)
+            .all(&t.db)
             .await
             .expect("Failed to fetch matches from DB");
         let game1_completed_matches = matches
@@ -141,7 +171,7 @@ mod tests {
         assert!(!game2_completed_matches.is_empty());
         let bot_stats = db::stats_history::Entity::find()
             .filter(db::stats_history::Column::Latest.eq(true))
-            .all(&db)
+            .all(&t.db)
             .await
             .expect("Failed to fetch bot stats from the DB");
         assert_eq!(
@@ -157,7 +187,7 @@ mod tests {
             .filter(db::programs::Column::IsPublic.eq(true))
             .limit(1)
             .into_values::<i64, db::programs::Column>()
-            .one(&db)
+            .one(&t.db)
             .await
             .expect("Failed to fetch a public program from the db")
             .expect("No public programs in the DB");
@@ -199,4 +229,163 @@ mod tests {
         server_handle.stop(true).await;
         let _ = server_join.await;
     }
+
+    #[tokio::test]
+    async fn create_bot() {
+        let t = default_test_setup().await;
+        tokio::fs::create_dir_all(&t.config.manager_config.cache_dir)
+            .await
+            .expect("Failed to create compilation cache dir");
+        tokio::fs::create_dir_all(&t.config.manager_config.match_run_dir)
+            .await
+            .expect("Failed to create match run dir");
+        // Cleanup some bots and games, leaving one bot and one game to compile.
+        let game = db::games::Entity::find()
+            .filter(db::games::Column::Name.eq("lowest-unique"))
+            .one(&t.db)
+            .await
+            .expect("Failed to get game id for lowest-unique")
+            .expect("Game lowest-unique not found");
+        let game_id = game.id;
+        let bots = db::bots::Entity::find()
+            .filter(db::bots::Column::GameId.eq(game_id))
+            .all(&t.db)
+            .await
+            .expect("Failed to fetch bots");
+        // Leave only 2 bots for lowest-unique.
+        let bots = bots[..2].to_vec();
+        db::bots::Entity::delete_many()
+            .filter(db::bots::Column::Id.is_not_in(bots.iter().map(|b| b.id)))
+            .exec(&t.db)
+            .await
+            .expect("Failed to delete extraneous bots");
+        db::games::Entity::delete_many()
+            .filter(db::games::Column::Name.ne("lowest-unique"))
+            .exec(&t.db)
+            .await
+            .expect("Failed to delete extraneous games");
+        db::programs::Entity::delete_many()
+            .filter(
+                db::programs::Column::Id.is_not_in(
+                    bots.iter()
+                        .map(|b| b.program_id)
+                        .chain(std::iter::once(game.program_id)),
+                ),
+            )
+            .exec(&t.db)
+            .await
+            .expect("Failed to delete extraneous programs");
+
+        let mut handle = proglad_server::server::create(t.config)
+            .await
+            .expect("Failed to create the server");
+        let server_handle = handle.server.handle();
+        let addrs = handle.addrs.clone();
+        let server_join = tokio::task::spawn(async move {
+            let _ = handle.server.await.inspect_err(|e| {
+                log::error!("Running the server failed: {e:?}");
+            });
+        });
+        let addr = addrs.first().expect("No bound address found").to_string();
+        let url_prefix = format!("http://{addr}/");
+
+        let client = reqwest::Client::new();
+        let source_file = reqwest::multipart::Part::bytes(SIMPLE_BOT_SRC.as_bytes());
+        let form = reqwest::multipart::Form::new()
+            .text("language", "python")
+            .text("name", "test-bot-1")
+            .part("file", source_file);
+        let resp = client
+            .post(format!("{url_prefix}create_bot/{game_id}"))
+            .multipart(form)
+            .send()
+            .await
+            .expect("Failed to send create bot request")
+            .error_for_status()
+            .expect("Create bot request failed");
+        let body = resp
+            .text()
+            .await
+            .expect("Failed to get body after bot creation request.");
+        assert!(body.contains("test-bot-1"), "{body}");
+
+        let new_bot = db::bots::Entity::find()
+            .filter(db::bots::Column::Id.is_not_in(bots.iter().map(|b| b.id)))
+            .one(&t.db)
+            .await
+            .expect("Failed to get new bot from db")
+            .expect("New bot not found in the db");
+        let update = db::programs::ActiveModel {
+            id: Set(new_bot.program_id),
+            is_public: Set(Some(true)),
+            ..Default::default()
+        };
+
+        db::programs::Entity::update(update)
+            .exec(&t.db)
+            .await
+            .expect("Failed to update new program to make it public");
+
+        let resp = reqwest::get(format!("{url_prefix}source/{}", new_bot.program_id))
+            .await
+            .expect(&format!(
+                "failed to query source code for new bot {:?}",
+                new_bot
+            ))
+            .error_for_status()
+            .expect(&format!(
+                "server returned an error when asked for source of the new program"
+            ));
+        assert_eq!(
+            resp.text()
+                .await
+                .expect("failed to get text from the new program response"),
+            SIMPLE_BOT_SRC
+        );
+
+        // Should be enough to run some matches.
+        let timeout = std::time::Duration::from_secs(45);
+        log::info!("Running the server for {timeout:?}");
+        tokio::time::sleep(timeout).await;
+        handle.scheduler.cancel();
+        handle
+            .scheduler
+            .join(std::time::Duration::from_secs(30))
+            .await;
+        let matches = db::matches::Entity::find()
+            .all(&t.db)
+            .await
+            .expect("Failed to fetch matches from DB");
+        assert_ne!(matches.len(), 0);
+        server_handle.stop(true).await;
+        let _ = server_join.await;
+    }
+
+    const SIMPLE_BOT_SRC: &str = r#"
+import fileinput
+import random
+import sys
+
+
+GAME_START = "start"
+YOUR_MOVE = "yourmove"
+
+def main():
+    print("ready")
+    sys.stdout.flush()
+    for line in fileinput.input():
+        cmd = list(line.strip().split())
+        if not cmd:
+            break
+        if cmd[0] == GAME_START:
+            N, p, M, R = map(int, cmd[1:])
+        elif cmd[0] == YOUR_MOVE:
+            options = [1.5**i for i in reversed(range(1, M + 1))]
+            [mp] = random.choices(range(1, M + 1), weights=options)
+            print(mp)
+            sys.stdout.flush()
+
+if __name__ == "__main__":
+    main()
+"#;
 }

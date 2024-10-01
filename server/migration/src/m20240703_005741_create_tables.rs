@@ -1,6 +1,6 @@
 use proglad_db::{accounts, bots, games, prelude::*, programs};
-use sea_orm::{EntityTrait, Set};
 use sea_orm::entity::prelude::TimeDateTimeWithTimeZone;
+use sea_orm::{EntityTrait, Set};
 use sea_orm_migration::prelude::*;
 
 #[derive(DeriveMigrationName)]
@@ -13,13 +13,14 @@ fn idx<E: EntityTrait>(s: &sea_orm::Schema, e: E) -> Vec<IndexCreateStatement> {
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, m: &SchemaManager) -> Result<(), DbErr> {
-        let s = sea_orm::Schema::new(sea_orm::DatabaseBackend::Sqlite);
+        let s = sea_orm::Schema::new(m.get_database_backend());
         m.create_table(s.create_table_from_entity(Accounts)).await?;
         m.create_table(s.create_table_from_entity(Programs)).await?;
         m.create_table(s.create_table_from_entity(Games)).await?;
         m.create_table(s.create_table_from_entity(Bots)).await?;
         m.create_table(s.create_table_from_entity(Matches)).await?;
-        m.create_table(s.create_table_from_entity(MatchParticipations)).await?;
+        m.create_table(s.create_table_from_entity(MatchParticipations))
+            .await?;
         let s = &s;
         let all_idx = [
             idx(s, Accounts),
@@ -41,17 +42,36 @@ impl MigrationTrait for Migration {
     }
 
     async fn down(&self, m: &SchemaManager) -> Result<(), DbErr> {
-        m.drop_table(Table::drop().table(MatchParticipations).if_exists().to_owned())
-            .await?;
+        m.drop_table(
+            Table::drop()
+                .table(MatchParticipations)
+                .if_exists()
+                .to_owned(),
+        )
+        .await
+        .inspect_err(log_err("drop match_participations"))?;
         m.drop_table(Table::drop().table(Matches).if_exists().to_owned())
-            .await?;
-        m.drop_table(Table::drop().table(Bots).if_exists().to_owned()).await?;
-        m.drop_table(Table::drop().table(Games).if_exists().to_owned()).await?;
+            .await
+            .inspect_err(log_err("drop matches"))?;
+        m.drop_table(Table::drop().table(Bots).if_exists().to_owned())
+            .await
+            .inspect_err(log_err("drop bots"))?;
+        m.drop_table(Table::drop().table(Games).if_exists().to_owned())
+            .await
+            .inspect_err(log_err("drop games"))?;
         m.drop_table(Table::drop().table(Programs).if_exists().to_owned())
-            .await?;
+            .await
+            .inspect_err(log_err("drop programs"))?;
         m.drop_table(Table::drop().table(Accounts).if_exists().to_owned())
-            .await?;
+            .await
+            .inspect_err(log_err("drop accounts"))?;
         Ok(())
+    }
+}
+
+fn log_err<'a>(ctx: &'a str) -> impl FnOnce(&DbErr) + 'a {
+    move |e| {
+        eprintln!("{ctx}: {e}");
     }
 }
 
@@ -73,7 +93,10 @@ async fn populate_database<'a>(m: &'a SchemaManager<'a>) -> Result<(), DbErr> {
     Ok(())
 }
 
-async fn populate_database_halma_quad<'a, C: ConnectionTrait>(db: &C, account_id: i64) -> Result<(), DbErr> {
+async fn populate_database_halma_quad<'a, C: ConnectionTrait>(
+    db: &C,
+    account_id: i64,
+) -> Result<(), DbErr> {
     let gameserver_path = "../games/halma-quad/server/main.rs";
     let now = TimeDateTimeWithTimeZone::now_utc();
     let source_code = tokio::fs::read_to_string(gameserver_path)
@@ -140,7 +163,8 @@ async fn populate_database_halma_quad<'a, C: ConnectionTrait>(db: &C, account_id
         name: Set("halma-quad".to_owned()),
         description: Set("Halma game on a 16x16 grid. \
             Move your pieces home across the field from where you start before your opponent does. \
-            Pieces move and jump like in checkers but are not taken off the board.".to_owned()),
+            Pieces move and jump like in checkers but are not taken off the board."
+            .to_owned()),
         program_id: Set(game_program_id),
         status: Set(games::Status::Active),
         min_players: Set(2),
@@ -230,7 +254,10 @@ async fn populate_database_halma_quad<'a, C: ConnectionTrait>(db: &C, account_id
 }
 
 #[allow(dead_code)]
-async fn populate_database_halma_hex<'a, C: ConnectionTrait>(db: &C, account_id: i64) -> Result<(), DbErr> {
+async fn populate_database_halma_hex<'a, C: ConnectionTrait>(
+    db: &C,
+    account_id: i64,
+) -> Result<(), DbErr> {
     let gameserver_path = "../games/halma-hex/server/main.rs";
     let now = TimeDateTimeWithTimeZone::now_utc();
     let source_code = tokio::fs::read_to_string(gameserver_path)
@@ -297,7 +324,8 @@ async fn populate_database_halma_hex<'a, C: ConnectionTrait>(db: &C, account_id:
         name: Set("halma-hex".to_owned()),
         description: Set("Halma game on a hexagonal grid. \
             Move your pieces home across the field from where you start before your opponent does. \
-            Pieces move and jump like in checkers but are not taken off the board.".to_owned()),
+            Pieces move and jump like in checkers but are not taken off the board."
+            .to_owned()),
         program_id: Set(game_program_id),
         status: Set(games::Status::Active),
         min_players: Set(2),
@@ -351,7 +379,10 @@ async fn populate_database_halma_hex<'a, C: ConnectionTrait>(db: &C, account_id:
     Ok(())
 }
 
-async fn populate_database_lowest_unique<'a, C: ConnectionTrait>(db: &C, account_id: i64) -> Result<(), DbErr> {
+async fn populate_database_lowest_unique<'a, C: ConnectionTrait>(
+    db: &C,
+    account_id: i64,
+) -> Result<(), DbErr> {
     let gameserver_path = "../games/lowest-unique/server/main.rs";
     let source_code = tokio::fs::read_to_string(gameserver_path)
         .await

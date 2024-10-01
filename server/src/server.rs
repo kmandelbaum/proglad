@@ -21,6 +21,7 @@ use proglad_db as db;
 use crate::bot::*;
 use crate::config::*;
 use crate::engine;
+use crate::file_store::FileStore;
 use crate::http_types::*;
 use crate::kratos::{self, *};
 use crate::scheduler;
@@ -76,11 +77,13 @@ pub async fn create(config: Config) -> anyhow::Result<Handle> {
         .context("Failed to register main template")?;
     let port = config.server_config.port;
 
-    let scheduler = scheduler::start(db.clone(), man, &config).await;
+    let file_store = FileStore {};
+    let scheduler = scheduler::start(db.clone(), file_store.clone(), man, &config).await;
     let app_state = ServerState {
         tmpl,
-        db,
+        file_store,
         config: config.server_config,
+        db,
     };
 
     let secret_key = actix_web::cookie::Key::generate();
@@ -113,7 +116,11 @@ pub async fn create(config: Config) -> anyhow::Result<Handle> {
     .bind(("::", port))?;
     let addrs = server.addrs();
     let server = server.run(); // Does not actually run the server but creates a future.
-    Ok(Handle { server, scheduler, addrs })
+    Ok(Handle {
+        server,
+        scheduler,
+        addrs,
+    })
 }
 
 #[derive(Serialize)]
@@ -694,6 +701,7 @@ async fn get_game(req: HttpRequest, path: web::Path<i64>) -> HttpResult {
 
 #[get("/source/{id}")]
 async fn get_source(req: HttpRequest, _session: Session, path: web::Path<i64>) -> HttpResult {
+    let state = server_state(&req)?;
     // TODO: use session to authenticate and determin if the user has access.
     let program_id = *path;
     let program = db::programs::Entity::find_by_id(program_id)
@@ -709,9 +717,18 @@ async fn get_source(req: HttpRequest, _session: Session, path: web::Path<i64>) -
     if !program.is_public.unwrap_or(false) {
         return Err(AppHttpError::Unauthorized);
     }
+    let source_code = match program.source_code {
+        Some(src) => src.into_bytes(),
+        None => engine::read_source_code(&state.file_store, &state.db, program.id)
+            .await
+            .map_err(|e| {
+                log::error!("Failed to read program {program_id} file: {e}");
+                AppHttpError::Internal
+            })?,
+    };
     Ok(HttpResponse::Ok()
         .append_header(ContentType(mime::TEXT_PLAIN_UTF_8))
-        .body(program.source_code.unwrap_or_default()))
+        .body(source_code))
 }
 
 #[derive(Debug, MultipartForm)]
@@ -732,8 +749,32 @@ async fn post_create_bot(
     let game_id = *path;
     let state = server_state(&req)?;
     let language = parse_language(&form.language)?;
-    let Some(owner) = kratos_authenticate(&req, &session).await? else {
-        return Err(AppHttpError::Unauthenticated);
+    let owner = match kratos_authenticate(&req, &session).await? {
+        Some(o) => o,
+        None => {
+            if let Some(default_account_name) =
+                &state.config.access_control.insecure_default_account
+            {
+                let Some(account_id) = db::accounts::Entity::find()
+                    .filter(db::accounts::Column::Name.eq(default_account_name))
+                    .select_only()
+                    .column(db::accounts::Column::Id)
+                    .into_values::<i64, db::accounts::Column>()
+                    .one(&state.db)
+                    .await
+                    .map_err(|e| {
+                        log::error!("Failed to fetch default account: {e}");
+                        AppHttpError::Internal
+                    })?
+                else {
+                    log::error!("Account name not found: {default_account_name}");
+                    return Err(AppHttpError::Unauthenticated);
+                };
+                account_id
+            } else {
+                return Err(AppHttpError::Unauthenticated);
+            }
+        }
     };
     if let Err(e) = validate_bot_name(&form.name) {
         return Err(AppHttpError::InvalidBotName { s: StringError(e) });
@@ -742,6 +783,7 @@ async fn post_create_bot(
     let txn_result = state
         .db
         .transaction(|txn| {
+            let file_store = state.file_store.clone();
             Box::pin(async move {
                 let existing_bots = db::bots::Entity::find()
                     .filter(
@@ -763,12 +805,20 @@ async fn post_create_bot(
                     }
                 }
 
-                engine::create_bot(txn, game_id, owner, form.file.file, language, &form.name)
-                    .await
-                    .map_err(|e| {
-                        log::info!("Failed to create bot for game {game_id}: {e:?}");
-                        AppHttpError::Internal
-                    })?;
+                engine::create_bot(
+                    txn,
+                    &file_store,
+                    game_id,
+                    owner,
+                    form.file.file,
+                    language,
+                    &form.name,
+                )
+                .await
+                .map_err(|e| {
+                    log::info!("Failed to create bot for game {game_id}: {e:?}");
+                    AppHttpError::Internal
+                })?;
                 Ok(())
             })
         })
