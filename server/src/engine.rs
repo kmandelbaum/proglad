@@ -134,8 +134,9 @@ pub async fn run_match<C: ConnectionTrait + TransactionTrait>(
         .map_err(|e| anyhow!("{e:?}"))
         .map(|_| ());
     db.transaction(|txn| {
+        let file_store = file_store.clone();
         Box::pin(async move {
-            let _ = db_update_match_result(txn, match_id, num_bots, match_result)
+            let _ = db_update_match_result(txn, &file_store, match_id, num_bots, match_result)
                 .await
                 .context("Failed to update match result")
                 .inspect_err(|e| {
@@ -437,10 +438,12 @@ async fn db_prepare_match<C: ConnectionTrait>(
 
 async fn db_update_match_result<C: ConnectionTrait>(
     db: &C,
+    file_store: &FileStore,
     match_id: manager::MatchId,
     num_players: usize,
-    result: manager::FullMatchResult,
+    mut result: manager::FullMatchResult,
 ) -> anyhow::Result<()> {
+    let replay = std::mem::replace(&mut result.log, Err(Default::default()));
     let (matches_update, participations_updates) =
         match_update_from_result(match_id, num_players, result).await;
     let _ = db::matches::Entity::update(matches_update)
@@ -452,6 +455,28 @@ async fn db_update_match_result<C: ConnectionTrait>(
         .inspect_err(|e| {
             log::error!("{e:?}");
         });
+    match replay {
+        Ok(replay) => {
+            let _ = file_store
+                .write(
+                    db,
+                    file_store::Requester::System,
+                    db::files::Model {
+                        owning_entity: db::files::OwningEntity::Match,
+                        owning_id: Some(match_id),
+                        kind: db::files::Kind::MatchReplay,
+                        compression: db::files::Compression::Gzip,
+                        content: Some(replay),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .inspect_err(|e| {
+                    log::error!("Failed to save replay: {e:?}");
+                });
+        }
+        Err(e) => log::error!("Error getting replay for match {match_id}: {e:?}"),
+    }
     for (i, p) in participations_updates.into_iter().enumerate() {
         let _ = db::match_participations::Entity::update(p)
             .exec(db)
@@ -566,7 +591,6 @@ async fn match_update_from_result(
         end_time: Set(result.end_time),
         ..Default::default()
     };
-    mu.log = Set(result.log.as_ref().ok().cloned());
     let mut participations = (1..=num_players)
         .map(|i| db::match_participations::ActiveModel {
             match_id: Set(match_id),

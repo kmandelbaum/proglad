@@ -12,7 +12,6 @@ use sea_query::IntoCondition;
 use serde::{Deserialize, Serialize};
 
 use std::collections::{HashMap, HashSet};
-use std::io::Read;
 use std::sync::Arc;
 
 use proglad_controller::manager;
@@ -21,7 +20,7 @@ use proglad_db as db;
 use crate::bot::*;
 use crate::config::*;
 use crate::engine;
-use crate::file_store::FileStore;
+use crate::file_store::{self, FileStore};
 use crate::http_types::*;
 use crate::kratos::{self, *};
 use crate::scheduler;
@@ -840,11 +839,33 @@ async fn post_create_bot(
 #[get("/replay/{match_id}")]
 async fn get_replay(req: HttpRequest, path: web::Path<i64>) -> HttpResult {
     let state = server_state(&req)?;
-    let replay = db_get_replay(&state.db, *path).await.map_err(|e| {
-        log::error!("Failed to get replay: {e}");
-        AppHttpError::BadClientData
-    })?;
-    Ok(HttpResponse::Ok().body(replay))
+    // TODO: populate the requester correctly.
+    let requester = file_store::Requester::Unauthenticated;
+    let file = state
+        .file_store
+        .read(
+            &state.db,
+            requester,
+            db::files::OwningEntity::Match,
+            Some(*path),
+            "",
+        )
+        .await
+        .map_err(|e| match e {
+            file_store::Error::NotFound => AppHttpError::NotFound,
+            file_store::Error::PermissionDenied => AppHttpError::Unauthorized,
+            e => {
+                log::error!("Failed to read replay file: {e:?}");
+                AppHttpError::Internal
+            }
+        })?;
+    let encoding = match file.compression {
+        db::files::Compression::Uncompressed => actix_web::http::header::ContentEncoding::Identity,
+        db::files::Compression::Gzip => actix_web::http::header::ContentEncoding::Gzip,
+    };
+    Ok(HttpResponse::Ok()
+        .append_header(encoding)
+        .body(file.content.unwrap_or_default()))
 }
 
 #[derive(Serialize)]
@@ -857,7 +878,6 @@ struct VisualizerTmplData<'a> {
 #[get("/visualizer/{match_id}")]
 async fn get_visualizer(req: HttpRequest, path: web::Path<i64>) -> HttpResult {
     let state = server_state(&req)?;
-    db_check_match_exists_and_has_replay(&state.db, *path).await?;
     let matches = db::matches::Entity::find_by_id(*path)
         .all(&state.db)
         .await
@@ -892,32 +912,13 @@ async fn get_visualizer(req: HttpRequest, path: web::Path<i64>) -> HttpResult {
         .body(html))
 }
 
-async fn db_get_replay(db: &DatabaseConnection, match_id: i64) -> Result<String, DbErr> {
-    let Some(log) = db::matches::Entity::find_by_id(match_id)
-        .one(db)
-        .await?
-        .and_then(|m| m.log)
-    else {
-        return Err(DbErr::RecordNotFound(format!("{match_id}")));
-    };
-
-    let mut gz = flate2::read::GzDecoder::new(log.as_slice());
-    let mut s = String::new();
-    gz.read_to_string(&mut s)
-        .map_err(|e| DbErr::Custom(format!("{e}")))?;
-    Ok(s)
-}
-
 async fn db_get_latest_match_with_replay_for_game(
     db: &DatabaseConnection,
     game_id: i64,
 ) -> Result<i64, DbErr> {
+    // TODO: also make sure there is a replay.
     let match_id: Option<i64> = db::matches::Entity::find()
-        .filter(
-            sea_orm::Condition::all()
-                .add(db::matches::Column::GameId.eq(game_id))
-                .add(db::matches::Column::Log.is_not_null()),
-        )
+        .filter(sea_orm::Condition::all().add(db::matches::Column::GameId.eq(game_id)))
         .order_by_desc(db::matches::Column::EndTime)
         .select_only()
         .column(db::matches::Column::Id)
@@ -925,28 +926,6 @@ async fn db_get_latest_match_with_replay_for_game(
         .one(db)
         .await?;
     match_id.ok_or_else(|| DbErr::RecordNotFound(format!("replay for game {game_id}")))
-}
-
-async fn db_check_match_exists_and_has_replay(
-    db: &DatabaseConnection,
-    match_id: i64,
-) -> Result<(), AppHttpError> {
-    let count: Option<(i32,)> = db::matches::Entity::find_by_id(match_id)
-        .filter(db::matches::Column::Log.is_not_null().into_condition())
-        .select_only()
-        .expr(db::matches::Column::Id.count())
-        .into_tuple()
-        .one(db)
-        .await
-        .map_err(|e| {
-            log::error!("Match {match_id} does not exist or checking failed: {e}");
-            AppHttpError::NotFound
-        })?;
-    if count.map_or(true, |(x,)| x == 0) {
-        Err(AppHttpError::NotFound)
-    } else {
-        Ok(())
-    }
 }
 
 async fn db_bot_owners_and_names(

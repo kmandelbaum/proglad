@@ -13,7 +13,6 @@ pub struct Model {
     pub start_time: Option<TimeDateTimeWithTimeZone>,
     #[sea_orm(indexed)]
     pub end_time: Option<TimeDateTimeWithTimeZone>,
-    pub log: Option<Vec<u8>>,
     pub system_message: String,
 }
 
