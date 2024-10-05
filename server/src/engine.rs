@@ -664,10 +664,7 @@ async fn compile_impl<C: ConnectionTrait + TransactionTrait>(
             "Failed to write back compilation status for program {}",
             program.id
         ))?;
-    let source_code = match program.source_code {
-        Some(src) => src.into_bytes(),
-        None => read_source_code(file_store, db, program.id).await?,
-    };
+    let source_code = read_source_code(file_store, db, program.id).await?;
     let compilation_status = man
         .compile(manager::Program {
             id: program.id,

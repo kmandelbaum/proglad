@@ -46,7 +46,6 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
     pub language: Language,
-    pub source_code: Option<String>,
     #[sea_orm(default_value = "new")]
     pub status: Status,
     pub status_reason: Option<String>,

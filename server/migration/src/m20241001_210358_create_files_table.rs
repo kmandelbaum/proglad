@@ -1,4 +1,4 @@
-use proglad_db::{prelude::*, files};
+use proglad_db::{files, prelude::*};
 use sea_orm::EntityTrait;
 use sea_orm_migration::prelude::*;
 
@@ -34,7 +34,8 @@ impl MigrationTrait for Migration {
     }
 
     async fn down(&self, m: &SchemaManager) -> Result<(), DbErr> {
-        m.drop_table(Table::drop().table(Files).if_exists().to_owned()).await?;
+        m.drop_table(Table::drop().table(Files).if_exists().to_owned())
+            .await?;
         Ok(())
     }
 }

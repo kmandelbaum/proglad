@@ -716,15 +716,12 @@ async fn get_source(req: HttpRequest, _session: Session, path: web::Path<i64>) -
     if !program.is_public.unwrap_or(false) {
         return Err(AppHttpError::Unauthorized);
     }
-    let source_code = match program.source_code {
-        Some(src) => src.into_bytes(),
-        None => engine::read_source_code(&state.file_store, &state.db, program.id)
-            .await
-            .map_err(|e| {
-                log::error!("Failed to read program {program_id} file: {e}");
-                AppHttpError::Internal
-            })?,
-    };
+    let source_code = engine::read_source_code(&state.file_store, &state.db, program.id)
+        .await
+        .map_err(|e| {
+            log::error!("Failed to read program {program_id} file: {e}");
+            AppHttpError::Internal
+        })?;
     Ok(HttpResponse::Ok()
         .append_header(ContentType(mime::TEXT_PLAIN_UTF_8))
         .body(source_code))

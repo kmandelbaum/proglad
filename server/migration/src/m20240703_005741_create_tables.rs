@@ -1,4 +1,4 @@
-use proglad_db::{accounts, bots, games, prelude::*, programs};
+use proglad_db::{accounts, bots, files, games, prelude::*, programs};
 use sea_orm::entity::prelude::TimeDateTimeWithTimeZone;
 use sea_orm::{EntityTrait, Set};
 use sea_orm_migration::prelude::*;
@@ -21,6 +21,7 @@ impl MigrationTrait for Migration {
         m.create_table(s.create_table_from_entity(Matches)).await?;
         m.create_table(s.create_table_from_entity(MatchParticipations))
             .await?;
+        m.create_table(s.create_table_from_entity(Files)).await?;
         let s = &s;
         let all_idx = [
             idx(s, Accounts),
@@ -29,12 +30,23 @@ impl MigrationTrait for Migration {
             idx(s, Bots),
             idx(s, Matches),
             idx(s, MatchParticipations),
+            idx(s, Files),
         ]
         .into_iter()
         .flatten();
         for i in all_idx {
             m.create_index(i).await?;
         }
+        let mut owning_entity_and_name_index = Index::create();
+        owning_entity_and_name_index
+            .name("files-owning-entity-and-name-index")
+            .if_not_exists()
+            .table(Files);
+        owning_entity_and_name_index.col(files::Column::OwningEntity);
+        owning_entity_and_name_index.col(files::Column::OwningId);
+        owning_entity_and_name_index.col(files::Column::Name);
+        owning_entity_and_name_index.unique();
+        m.create_index(owning_entity_and_name_index).await?;
         if std::env::var("PROGLAD_POPULATE_DATABASE").is_ok() {
             populate_database(m).await?;
         }
@@ -108,7 +120,6 @@ async fn populate_database_halma_quad<'a, C: ConnectionTrait>(
         })?;
     let game_program = programs::ActiveModel {
         language: Set(programs::Language::Rust),
-        source_code: Set(Some(source_code)),
         status: Set(programs::Status::New),
         status_update_time: Set(now),
         ..Default::default()
@@ -117,6 +128,7 @@ async fn populate_database_halma_quad<'a, C: ConnectionTrait>(
         .exec(db)
         .await?
         .last_insert_id;
+    write_source(db, game_program_id, source_code).await?;
     let bot_path = "../games/halma-quad/player-greedy/main.rs";
     let source_code = tokio::fs::read_to_string(bot_path).await.map_err(|e| {
         DbErr::Custom(format!(
@@ -125,7 +137,6 @@ async fn populate_database_halma_quad<'a, C: ConnectionTrait>(
     })?;
     let bot_program = programs::ActiveModel {
         language: Set(programs::Language::Rust),
-        source_code: Set(Some(source_code)),
         status: Set(programs::Status::New),
         status_update_time: Set(now),
         is_public: Set(Some(true)),
@@ -135,10 +146,12 @@ async fn populate_database_halma_quad<'a, C: ConnectionTrait>(
         .exec(db)
         .await?
         .last_insert_id;
+    write_source(db, bot1_program_id, source_code.clone()).await?;
     let bot2_program_id = programs::Entity::insert(bot_program)
         .exec(db)
         .await?
         .last_insert_id;
+    write_source(db, bot2_program_id, source_code).await?;
 
     let bot_path = "../games/halma-quad/player-basic/basic.py";
     let source_code = tokio::fs::read_to_string(bot_path).await.map_err(|e| {
@@ -148,7 +161,6 @@ async fn populate_database_halma_quad<'a, C: ConnectionTrait>(
     })?;
     let bot_program = programs::ActiveModel {
         language: Set(programs::Language::Python),
-        source_code: Set(Some(source_code)),
         status: Set(programs::Status::New),
         status_update_time: Set(now),
         is_public: Set(Some(true)),
@@ -158,6 +170,7 @@ async fn populate_database_halma_quad<'a, C: ConnectionTrait>(
         .exec(db)
         .await?
         .last_insert_id;
+    write_source(db, bot3_program_id, source_code).await?;
 
     let game = games::ActiveModel {
         name: Set("halma-quad".to_owned()),
@@ -269,7 +282,6 @@ async fn populate_database_halma_hex<'a, C: ConnectionTrait>(
         })?;
     let game_program = programs::ActiveModel {
         language: Set(programs::Language::Rust),
-        source_code: Set(Some(source_code)),
         status: Set(programs::Status::New),
         status_update_time: Set(now),
         ..Default::default()
@@ -278,6 +290,7 @@ async fn populate_database_halma_hex<'a, C: ConnectionTrait>(
         .exec(db)
         .await?
         .last_insert_id;
+    write_source(db, game_program_id, source_code).await?;
     let bot_path = "../games/halma-hex/player-greedy/main.rs";
     let source_code = tokio::fs::read_to_string(bot_path).await.map_err(|e| {
         DbErr::Custom(format!(
@@ -286,7 +299,6 @@ async fn populate_database_halma_hex<'a, C: ConnectionTrait>(
     })?;
     let bot_program = programs::ActiveModel {
         language: Set(programs::Language::Rust),
-        source_code: Set(Some(source_code)),
         status: Set(programs::Status::New),
         status_update_time: Set(now),
         is_public: Set(Some(true)),
@@ -296,10 +308,12 @@ async fn populate_database_halma_hex<'a, C: ConnectionTrait>(
         .exec(db)
         .await?
         .last_insert_id;
+    write_source(db, bot1_program_id, source_code.clone()).await?;
     let bot2_program_id = programs::Entity::insert(bot_program)
         .exec(db)
         .await?
         .last_insert_id;
+    write_source(db, bot2_program_id, source_code).await?;
 
     let bot_path = "../games/halma-hex/player-basic/basic.py";
     let source_code = tokio::fs::read_to_string(bot_path).await.map_err(|e| {
@@ -309,7 +323,6 @@ async fn populate_database_halma_hex<'a, C: ConnectionTrait>(
     })?;
     let bot_program = programs::ActiveModel {
         language: Set(programs::Language::Python),
-        source_code: Set(Some(source_code)),
         status: Set(programs::Status::New),
         status_update_time: Set(now),
         is_public: Set(Some(true)),
@@ -319,6 +332,7 @@ async fn populate_database_halma_hex<'a, C: ConnectionTrait>(
         .exec(db)
         .await?
         .last_insert_id;
+    write_source(db, bot3_program_id, source_code).await?;
 
     let game = games::ActiveModel {
         name: Set("halma-hex".to_owned()),
@@ -394,7 +408,6 @@ async fn populate_database_lowest_unique<'a, C: ConnectionTrait>(
     let now = TimeDateTimeWithTimeZone::now_utc();
     let game_program = programs::ActiveModel {
         language: Set(programs::Language::Rust),
-        source_code: Set(Some(source_code)),
         status: Set(programs::Status::New),
         status_update_time: Set(now),
         ..Default::default()
@@ -403,6 +416,8 @@ async fn populate_database_lowest_unique<'a, C: ConnectionTrait>(
         .exec(db)
         .await?
         .last_insert_id;
+    write_source(db, game_program_id, source_code).await?;
+
     let bot_path = "../games/lowest-unique/player-random/main.go";
     let source_code = tokio::fs::read_to_string(bot_path).await.map_err(|e| {
         DbErr::Custom(format!(
@@ -411,7 +426,6 @@ async fn populate_database_lowest_unique<'a, C: ConnectionTrait>(
     })?;
     let bot_program = programs::ActiveModel {
         language: Set(programs::Language::Go),
-        source_code: Set(Some(source_code)),
         status: Set(programs::Status::New),
         status_update_time: Set(now),
         is_public: Set(Some(true)),
@@ -421,6 +435,7 @@ async fn populate_database_lowest_unique<'a, C: ConnectionTrait>(
         .exec(db)
         .await?
         .last_insert_id;
+    write_source(db, bot1_program_id, source_code).await?;
 
     let game = games::ActiveModel {
         name: Set("lowest-unique".to_owned()),
@@ -453,5 +468,26 @@ async fn populate_database_lowest_unique<'a, C: ConnectionTrait>(
         };
         bots::Entity::insert(bot).exec(db).await?;
     }
+    Ok(())
+}
+
+async fn write_source<C: ConnectionTrait>(
+    db: &C,
+    program_id: i64,
+    content: String,
+) -> Result<(), DbErr> {
+    use proglad_db as db;
+    let source_file = db::files::ActiveModel {
+        owning_entity: Set(db::files::OwningEntity::Program),
+        owning_id: Set(Some(program_id)),
+        content_type: Set(db::files::ContentType::PlainText),
+        kind: Set(db::files::Kind::SourceCode),
+        content: Set(Some(content.into_bytes())),
+        last_update: Set(TimeDateTimeWithTimeZone::now_utc()),
+        name: Set(String::new()),
+        compression: Set(db::files::Compression::Uncompressed),
+        ..Default::default()
+    };
+    Files::insert(source_file).exec(db).await?;
     Ok(())
 }
