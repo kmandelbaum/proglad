@@ -55,25 +55,10 @@ pub async fn create(config: Config) -> anyhow::Result<Handle> {
     let mut tmpl = handlebars::Handlebars::new();
     tmpl.set_strict_mode(true);
     tmpl.set_dev_mode(true);
-    let tf = |t: &str| -> std::path::PathBuf {
-        std::path::Path::new(&config.server_config.fs_root_dir)
-            .join("templates")
-            .join(format!("{t}.hbs"))
-    };
-    tmpl.register_template_file("creatematch", tf("creatematch"))
-        .context("Failed to register creatematch template")?;
-    tmpl.register_template_file("games", tf("games"))
-        .context("Failed to register games template")?;
-    tmpl.register_template_file("visualizer", tf("visualizer"))
-        .context("Failed to register visualizer template")?;
-    tmpl.register_template_file("game", tf("game"))
-        .context("Failed to register game template")?;
-    tmpl.register_template_file("bots", tf("bots"))
-        .context("Failed to register bots template")?;
-    tmpl.register_template_file("matches", tf("matches"))
-        .context("Failed to register matches")?;
-    tmpl.register_template_file("main", tf("main"))
-        .context("Failed to register main template")?;
+    tmpl.register_templates_directory(
+        config.server_config.fs_root_dir.join("templates"),
+        Default::default())
+        .context("Failed to register templates directory")?;
     let port = config.server_config.port;
 
     let file_store = FileStore {};
