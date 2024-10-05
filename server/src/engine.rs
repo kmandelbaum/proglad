@@ -718,9 +718,8 @@ pub struct CleanupConfig {
     pub max_delete_matches_num: u64,
 }
 
-// Retains 1000 most recent matches per game and
-// deletes everything else.
-pub async fn cleanup_matches_batch<C: ConnectionTrait>(
+// Retains most recent matches per game and deletes everything else.
+pub async fn cleanup_matches_batch<C: ConnectionTrait + TransactionTrait>(
     db: &C,
     config: &CleanupConfig,
 ) -> Result<(), MyDbError> {
@@ -786,15 +785,33 @@ pub async fn cleanup_matches_batch<C: ConnectionTrait>(
         if ids.is_empty() {
             continue;
         }
-        let res = db::matches::Entity::delete_many()
-            .filter(db::matches::Column::Id.is_in(ids.into_iter().map(|idr| idr.id)))
-            .exec(db)
-            .await
-            .map_err(|e| MyDbError {
-                context: "Failed to delete matches of game {game_id}".to_owned(),
-                db_error: e,
-            })?;
-        log::info!("Deleted {} matches for game {game_id}", res.rows_affected);
+        let res = db.transaction(|txn| {
+            Box::pin(async move {
+            let matches_deleted = db::matches::Entity::delete_many()
+                .filter(db::matches::Column::Id.is_in(ids.iter().map(|idr| idr.id)))
+                .exec(txn)
+                .await
+                .map_err(|e| MyDbError {
+                    context: "Failed to delete matches of game {game_id}".to_owned(),
+                    db_error: e,
+                })?.rows_affected;
+            let files_deleted = db::files::Entity::delete_many()
+                .filter(Condition::all()
+                     .add(db::files::Column::OwningEntity.eq(db::files::OwningEntity::Match))
+                     .add(db::files::Column::OwningId.is_in(ids.into_iter().map(|idr| idr.id))))
+                .exec(txn)
+                .await
+                .map_err(|e| MyDbError {
+                    context: "Failed to delete files of matches of game {game_id}".to_owned(),
+                    db_error: e,
+                })?.rows_affected;
+            log::info!("Deleted {matches_deleted} matches, {files_deleted} files for game {game_id}");
+                Ok::<(), MyDbError>(())
+            })
+        }).await;
+        if let Err(e) = res {
+            log::error!("Match cleanup transaction failed: {e:?}");
+        }
     }
     Ok(())
 }

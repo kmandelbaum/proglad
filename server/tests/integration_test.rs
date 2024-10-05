@@ -1,13 +1,22 @@
 #[cfg(feature = "integration_tests")]
 mod tests {
+
     use std::collections::HashSet;
     use std::sync::Once;
 
-    use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect, Set};
+    use sea_orm::{
+        ColumnTrait, DatabaseConnection, EntityTrait, FromQueryResult, QueryFilter, QuerySelect,
+        Set,
+    };
     use sea_orm_migration::MigratorTrait;
     use std::path::Path;
 
     use proglad_db as db;
+
+    #[derive(FromQueryResult)]
+    struct IdResult {
+        id: i64,
+    }
 
     static INIT: Once = Once::new();
 
@@ -159,6 +168,16 @@ mod tests {
             .all(&t.db)
             .await
             .expect("Failed to fetch matches from DB");
+        assert!(
+            matches.len() >= 10,
+            "Too few matches found: {}",
+            matches.len()
+        );
+        assert!(
+            matches.len() <= 13,
+            "Too many matches found: {}, cleanup is probably not working",
+            matches.len()
+        );
         let game1_completed_matches = matches
             .iter()
             .filter(|m| m.game_id == 1 && m.end_time.is_some())
@@ -181,6 +200,20 @@ mod tests {
                 .map(|bs| bs.bot_id)
                 .collect::<HashSet<i64>>(),
             "The set of bots that got games and the full set of bots differ. This can be flaky."
+        );
+
+        // Check that we have replays for all matches.
+        let replay_match_ids = db::files::Entity::find()
+            .filter(db::files::Column::OwningEntity.eq(db::files::OwningEntity::Match))
+            .select_only()
+            .column_as(db::files::Column::OwningId, "id")
+            .into_model::<IdResult>()
+            .all(&t.db)
+            .await
+            .expect("Failed to fetch all file ids for match replays");
+        assert_eq!(
+            HashSet::<i64>::from_iter(replay_match_ids.iter().map(|i| i.id)),
+            HashSet::<i64>::from_iter(matches.iter().map(|m| m.id))
         );
 
         let public_prog_id = db::programs::Entity::find()
