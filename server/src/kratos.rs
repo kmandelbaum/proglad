@@ -18,7 +18,7 @@ pub async fn kratos_after_registrtation_hook(
     req: HttpRequest,
     info: web::Json<AccountInfo>,
 ) -> HttpResult {
-    match crate::account::validate_account_name(&info.username) {
+    match crate::validation::validate_account_name(&info.username) {
         Ok(()) => {}
         Err(e) => {
             return Ok(HttpResponse::BadRequest()

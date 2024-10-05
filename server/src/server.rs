@@ -17,7 +17,7 @@ use std::sync::Arc;
 use proglad_controller::manager;
 use proglad_db as db;
 
-use crate::bot::*;
+use crate::validation::*;
 use crate::config::*;
 use crate::engine;
 use crate::file_store::{self, FileStore};
