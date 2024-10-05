@@ -1,10 +1,8 @@
 use anyhow::anyhow;
 use clap::Parser;
 use sea_orm::prelude::TimeDateTimeWithTimeZone;
-use sea_orm::{
-    ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter
-};
 use sea_orm::Set;
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 
 use proglad_db as db;
 
@@ -12,13 +10,13 @@ use proglad_db as db;
 struct Config {
     #[arg(long)]
     db: String,
-    #[arg(long, short='p')]
+    #[arg(long, short = 'p')]
     program: Option<i64>,
-    #[arg(long, short='b')]
+    #[arg(long, short = 'b')]
     bot: Option<String>,
-    #[arg(long, short='g')]
+    #[arg(long, short = 'g')]
     game: Option<String>,
-    #[arg(long, short='f')]
+    #[arg(long, short = 'f')]
     filename: String,
     #[arg(long)]
     skip_status_reset: bool,
@@ -32,7 +30,8 @@ async fn program_id(cfg: &Config, db: &DatabaseConnection) -> anyhow::Result<i64
             if let Some(game) = db::games::Entity::find()
                 .filter(db::games::Column::Name.eq(game_name))
                 .one(db)
-                .await? {
+                .await?
+            {
                 Ok(game.program_id)
             } else {
                 Err(anyhow!("Game {game_name} not found"))

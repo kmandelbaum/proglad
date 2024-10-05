@@ -35,7 +35,6 @@ pub fn validate_account_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
-
 fn char_allowed(c: char) -> bool {
     c.is_alphanumeric() && c.is_ascii() || c == '-' || c == '_'
 }

@@ -16,7 +16,6 @@ pub struct Model {
     pub system_message: String,
 }
 
-
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(has_many = "super::match_participations::Entity")]

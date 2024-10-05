@@ -25,7 +25,7 @@ pub enum Language {
     #[sea_orm(string_value = "go")]
     Go,
     #[sea_orm(string_value = "java")]
-    Java
+    Java,
 }
 
 impl Language {

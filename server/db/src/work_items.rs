@@ -39,7 +39,7 @@ pub struct Model {
     pub game_id: Option<i64>,
     pub program_id: Option<i64>,
     pub match_id: Option<i64>,
-    pub priority: i64,  // Greater value is higher.
+    pub priority: i64, // Greater value is higher.
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -49,7 +49,7 @@ pub enum Relation {
         from = "Column::GameId",
         to = "super::games::Column::Id",
         on_update = "Cascade",
-        on_delete = "SetNull",
+        on_delete = "SetNull"
     )]
     Games,
     #[sea_orm(
@@ -57,7 +57,7 @@ pub enum Relation {
         from = "Column::MatchId",
         to = "super::matches::Column::Id",
         on_update = "Cascade",
-        on_delete = "SetNull",
+        on_delete = "SetNull"
     )]
     Matches,
     #[sea_orm(
@@ -65,7 +65,7 @@ pub enum Relation {
         from = "Column::ProgramId",
         to = "super::programs::Column::Id",
         on_update = "Cascade",
-        on_delete = "SetNull",
+        on_delete = "SetNull"
     )]
     Programs,
 }

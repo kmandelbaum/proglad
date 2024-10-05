@@ -18,7 +18,7 @@ async fn main() -> anyhow::Result<()> {
     let cfg = Config::parse();
     let db = sea_orm::Database::connect(&cfg.db).await?;
     let programs = db::programs::Entity::find().all(&db).await?;
-    let file_store = FileStore{};
+    let file_store = FileStore {};
     for p in programs {
         let Some(source_code) = p.source_code else {
             continue;
@@ -34,7 +34,9 @@ async fn main() -> anyhow::Result<()> {
             content: Some(source_code.into_bytes()),
             ..Default::default()
         })?;
-        file_store.write(&db, file_store::Requester::System, file).await?;
+        file_store
+            .write(&db, file_store::Requester::System, file)
+            .await?;
         println!("Moved source for program {}", p.id);
     }
     Ok(())

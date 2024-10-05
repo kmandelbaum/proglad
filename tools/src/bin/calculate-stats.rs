@@ -1,11 +1,8 @@
 use clap::Parser;
-use sea_orm::{
-    ColumnTrait, EntityTrait, QueryFilter, QueryOrder,
-    TransactionTrait
-};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, TransactionTrait};
 
-use proglad_server::engine;
 use proglad_db as db;
+use proglad_server::engine;
 
 #[derive(Parser, Debug)]
 struct Config {
@@ -13,7 +10,6 @@ struct Config {
     db: String,
     #[arg(long)]
     game_id: i64,
-
 }
 
 #[tokio::main]
@@ -29,22 +25,22 @@ async fn main() -> anyhow::Result<()> {
         println!("Processing match {}", m.id);
         let participations = db::match_participations::Entity::find()
             .filter(db::match_participations::Column::MatchId.eq(m.id))
-            .all(&db).await?;
-        let scores = participations.into_iter().filter_map(
-            |p| p.score.map(|s| (p.bot_id, s))).collect::<Vec<_>>();
+            .all(&db)
+            .await?;
+        let scores = participations
+            .into_iter()
+            .filter_map(|p| p.score.map(|s| (p.bot_id, s)))
+            .collect::<Vec<_>>();
         if scores.is_empty() {
             continue;
         }
         db.transaction(|txn| {
             Box::pin(async move {
-                engine::db_update_stats_for_match(
-                    txn,
-                    m.id,
-                    scores,
-                ).await?;
+                engine::db_update_stats_for_match(txn, m.id, scores).await?;
                 Ok::<(), engine::MyDbError>(())
             })
-        }).await?;
+        })
+        .await?;
     }
     Ok(())
 }

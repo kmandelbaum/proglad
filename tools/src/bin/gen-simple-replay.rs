@@ -1,7 +1,7 @@
 use proglad_api::visualize::*;
 
 fn color(r: f32, g: f32, b: f32, a: f32) -> Color {
-    Color{ r, g, b, a}
+    Color { r, g, b, a }
 }
 
 fn main() {
@@ -11,21 +11,21 @@ fn main() {
             event: Event::Create {
                 id: 1,
                 geometry: vec![
-                    geom::Geom::Circle{
+                    geom::Geom::Circle {
                         center: (0.0, 0.0),
                         radius: 0.1,
                         thickness: 0.01,
                         stroke_color: color(0.1, 0.1, 0.1, 1.0),
                         fill_color: color(0.1, 0.5, 0.1, 1.0),
                     },
-                    geom::Geom::Circle{
+                    geom::Geom::Circle {
                         center: (0.03, 0.06),
                         radius: 0.05,
                         thickness: 0.01,
                         stroke_color: color(0.1, 0.1, 0.1, 1.0),
                         fill_color: color(0.5, 0.1, 0.1, 1.0),
                     },
-                    geom::Geom::Line{
+                    geom::Geom::Line {
                         from: (0., 0.),
                         to: (0.03, 0.06),
                         thickness: 0.01,
@@ -39,7 +39,6 @@ fn main() {
         TimedEvent {
             start_time: 0.1,
             event: Event::Transform {
-
                 id: 1,
                 duration: 2.,
                 animate_function: AnimateFunction::Linear,

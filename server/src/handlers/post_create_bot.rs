@@ -1,0 +1,121 @@
+use crate::engine;
+use crate::handlers::prelude::*;
+use crate::validation::*;
+use actix_multipart::form::{tempfile::TempFile, text::Text, MultipartForm};
+
+#[derive(Debug, MultipartForm)]
+struct CreateBotForm {
+    #[multipart(limit = "64KB")]
+    file: TempFile,
+    language: Text<String>,
+    name: Text<String>,
+}
+
+#[post("/create_bot/{game_id}")]
+pub async fn post_create_bot(
+    MultipartForm(form): MultipartForm<CreateBotForm>,
+    req: HttpRequest,
+    session: Session,
+    path: web::Path<i64>,
+) -> impl Responder {
+    let game_id = *path;
+    let state = server_state(&req)?;
+    let language = parse_language(&form.language)?;
+    let owner = match kratos_authenticate(&req, &session).await? {
+        Some(o) => o,
+        None => {
+            if let Some(default_account_name) =
+                &state.config.access_control.insecure_default_account
+            {
+                let Some(account_id) = db::accounts::Entity::find()
+                    .filter(db::accounts::Column::Name.eq(default_account_name))
+                    .select_only()
+                    .column(db::accounts::Column::Id)
+                    .into_values::<i64, db::accounts::Column>()
+                    .one(&state.db)
+                    .await
+                    .map_err(|e| {
+                        log::error!("Failed to fetch default account: {e}");
+                        AppHttpError::Internal
+                    })?
+                else {
+                    log::error!("Account name not found: {default_account_name}");
+                    return Err(AppHttpError::Unauthenticated);
+                };
+                account_id
+            } else {
+                return Err(AppHttpError::Unauthenticated);
+            }
+        }
+    };
+    if let Err(e) = validate_bot_name(&form.name) {
+        return Err(AppHttpError::InvalidBotName { s: StringError(e) });
+    }
+    // TODO: move this thing into engine.
+    let txn_result = state
+        .db
+        .transaction(|txn| {
+            let file_store = state.file_store.clone();
+            Box::pin(async move {
+                let existing_bots = db::bots::Entity::find()
+                    .filter(
+                        sea_orm::Condition::all()
+                            .add(db::bots::Column::OwnerId.eq(owner))
+                            .add(db::bots::Column::Name.eq(form.name.as_str()))
+                            .add(db::bots::Column::GameId.eq(game_id)),
+                    )
+                    .all(txn)
+                    .await;
+                match existing_bots {
+                    Ok(bots) => {
+                        if !bots.is_empty() {
+                            return Err(AppHttpError::BotAlreadyExists);
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Error while checking for existing bots: {e}");
+                    }
+                }
+
+                engine::create_bot(
+                    txn,
+                    &file_store,
+                    game_id,
+                    owner,
+                    form.file.file,
+                    language,
+                    &form.name,
+                )
+                .await
+                .map_err(|e| {
+                    log::info!("Failed to create bot for game {game_id}: {e:?}");
+                    AppHttpError::Internal
+                })?;
+                Ok(())
+            })
+        })
+        .await;
+    match txn_result {
+        Err(sea_orm::TransactionError::Connection(e)) => {
+            log::info!("Creating bot failed due to TransactionError::Connection({e:?})");
+            Err(AppHttpError::Internal)
+        }
+        Err(sea_orm::TransactionError::Transaction(e)) => Err(e),
+        Ok(()) => Ok::<_, AppHttpError>(
+            web::Redirect::to(format!("{}/bots", state.config.site_base_url_path))
+                .see_other()
+                .respond_to(&req),
+        ),
+    }
+}
+
+fn parse_language(language: &str) -> Result<db::programs::Language, AppHttpError> {
+    Ok(match language {
+        "cpp" => db::programs::Language::Cpp,
+        "go" => db::programs::Language::Go,
+        "java" => db::programs::Language::Java,
+        "python" => db::programs::Language::Python,
+        "rust" => db::programs::Language::Rust,
+        _ => return Err(AppHttpError::BadClientData),
+    })
+}
