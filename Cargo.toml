@@ -1,0 +1,38 @@
+[workspace]
+resolver = "2"
+members = [
+  "api",
+  "controller",
+  "server",
+  "server/db",
+  "server/migration",
+  "tools",
+]
+exclude = [
+  "visualizer-svg",
+]
+
+[workspace.dependencies]
+anyhow = "1.0.86"
+flate2 = "1.0.30"
+log = "0.4.21"
+proglad-api = { path = "api" }
+proglad-controller = { path = "controller" }
+proglad-db = { path = "server/db" }
+proglad-migration = { path = "server/migration" }
+proglad-server = { path = "server" }
+sea-orm = { version = "0.12.15", features = ["sqlx-sqlite", "runtime-tokio"] }
+sea-query = { version = "0.30.7", features = ["backend-sqlite"] }
+serde = { version = "1.0.203", features = ["derive"] }
+tempfile = { version = "3.10.1" }
+tempdir = { version = "0.3.7" }
+time = { version = "0.3.36", features = ["serde", "serde-human-readable"] }
+tokio = { version = "1.38.0", features = ["rt-multi-thread", "io-std", "io-util", "net", "time", "macros", "process", "fs"] }
+tokio-util = { version = "0.7.11", features = ["codec"] }
+toml = "0.8.19"
+
+[workspace.package]
+description = "Program Galdiators - write bots that compete or cooperate."
+version = "0.1.0"
+authors = ["Konstantin Mandelbaum <submulticativity@gmail.com>"]
+edition = "2021"

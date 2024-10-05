@@ -1,9 +1,10 @@
 [package]
 name = "proglad-db"
-version = "0.1.0"
-authors = ["Konstantin Mandelbaum <submulticativity@gmail.com>"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+edition.workspace = true
 
 [dependencies]
-flate2 = "1.0.30"
-sea-orm = "0.12.15"
+flate2 = { workspace = true }
+sea-orm = { workspace = true }

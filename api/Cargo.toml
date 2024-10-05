@@ -1,10 +1,11 @@
 [package]
 name = "proglad-api"
-version = "0.1.0"
-authors = ["Konstantin Mandelbaum <submulticativity@gmail.com>"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+edition.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0.203", features = ["derive"] }
+serde = { workspace = true }

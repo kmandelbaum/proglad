@@ -1,16 +1,28 @@
 [package]
 name = "tools"
-version = "0.1.0"
-authors = ["Konstantin Mandelbaum <submulticativity@gmail.com>"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+edition.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
 clap = { version = "4.5.17", features = ["derive"] }
-proglad-api = { version = "0.1.0", path = "../api" }
-proglad-server = { path = "../server" }
-proglad-db = { path = "../server/db" }
+proglad-api = { workspace = true }
+proglad-server = { workspace = true }
+proglad-db = { workspace = true }
+tokio = { workspace = true }
+sea-orm = { workspace = true }
+sea-query = { workspace = true }
 serde_json = "1.0.117"
-tokio = { version = "1.40.0", features = ["rt", "macros", "fs"] }
-sea-orm = { version = "0.12.15", features = ["sqlx-sqlite", "runtime-tokio"] }
-sea-query = { version = "0.30.7", features = ["backend-sqlite"] }
-anyhow = "1.0.87"
+
+[features]
+legacy-source-code-field = []
+
+[[bin]]
+name = "move-source"
+required-features = ["legacy-source-code-field"]
+
+[[bin]]
+name = "update-source"
+required-features = ["legacy-source-code-field"]
