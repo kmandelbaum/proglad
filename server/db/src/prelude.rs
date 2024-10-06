@@ -1,4 +1,5 @@
 pub use super::accounts::Entity as Accounts;
+pub use super::acls::Entity as Acls;
 pub use super::bots::Entity as Bots;
 pub use super::files::Entity as Files;
 pub use super::games::Entity as Games;

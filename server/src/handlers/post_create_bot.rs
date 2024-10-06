@@ -21,32 +21,25 @@ pub async fn post_create_bot(
     let game_id = *path;
     let state = server_state(&req)?;
     let language = parse_language(&form.language)?;
-    let owner = match kratos_authenticate(&req, &session).await? {
-        Some(o) => o,
-        None => {
-            if let Some(default_account_name) =
-                &state.config.access_control.insecure_default_account
-            {
-                let Some(account_id) = db::accounts::Entity::find()
-                    .filter(db::accounts::Column::Name.eq(default_account_name))
-                    .select_only()
-                    .column(db::accounts::Column::Id)
-                    .into_values::<i64, db::accounts::Column>()
-                    .one(&state.db)
-                    .await
-                    .map_err(|e| {
-                        log::error!("Failed to fetch default account: {e}");
-                        AppHttpError::Internal
-                    })?
-                else {
-                    log::error!("Account name not found: {default_account_name}");
-                    return Err(AppHttpError::Unauthenticated);
-                };
-                account_id
-            } else {
-                return Err(AppHttpError::Unauthenticated);
-            }
+    let requester = requester(&req, &session).await?;
+    crate::acl::check(
+        &state.db,
+        requester,
+        db::acls::AccessType::CreateBotsInGame,
+        db::common::EntityKind::Game,
+        Some(game_id),
+    )
+    .await
+    .map_err(|e| match e {
+        crate::acl::Error::Denied => AppHttpError::Unauthorized,
+        crate::acl::Error::NotFound(_) => AppHttpError::NotFound,
+        crate::acl::Error::DbErr(_) | crate::acl::Error::InvalidArgument(_) => {
+            log::error!("Error while checking acl: {e:?}");
+            AppHttpError::Internal
         }
+    })?;
+    let Requester::Account(owner) = requester else {
+        return Err(AppHttpError::Unauthenticated);
     };
     if let Err(e) = validate_bot_name(&form.name) {
         return Err(AppHttpError::InvalidBotName { s: StringError(e) });

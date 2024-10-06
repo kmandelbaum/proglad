@@ -1,5 +1,7 @@
 use sea_orm::entity::prelude::*;
 
+use crate::common;
+
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, EnumIter, DeriveActiveEnum)]
 #[sea_orm(rs_type = "i8", db_type = "Integer")]
 pub enum Kind {
@@ -28,24 +30,13 @@ pub enum Compression {
     Gzip = 1,
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, EnumIter, DeriveActiveEnum)]
-#[sea_orm(rs_type = "i8", db_type = "Integer")]
-pub enum OwningEntity {
-    #[default]
-    None = 0,
-    Account = 1,
-    Game = 2,
-    Match = 3,
-    Program = 4,
-}
-
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "files")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
 
-    pub owning_entity: OwningEntity,
+    pub owning_entity: common::EntityKind,
     pub owning_id: Option<i64>,
     pub name: String,
 
@@ -64,7 +55,7 @@ impl Default for Model {
     fn default() -> Self {
         Self {
             id: 0,
-            owning_entity: OwningEntity::None,
+            owning_entity: common::EntityKind::None,
             owning_id: None,
             name: String::new(),
             last_update: TimeDateTimeWithTimeZone::now_utc(),

@@ -297,7 +297,7 @@ pub async fn create_bot<C: ConnectionTrait>(
         .context("Failed to insert program by account {owner_id} for game {game_id}")?
         .last_insert_id;
     let file = db::files::Model {
-        owning_entity: db::files::OwningEntity::Program,
+        owning_entity: db::common::EntityKind::Program,
         owning_id: Some(program_id),
         content: Some(source_code),
         kind: db::files::Kind::SourceCode,
@@ -462,11 +462,12 @@ async fn db_update_match_result<C: ConnectionTrait>(
                     db,
                     file_store::Requester::System,
                     db::files::Model {
-                        owning_entity: db::files::OwningEntity::Match,
+                        owning_entity: db::common::EntityKind::Match,
                         owning_id: Some(match_id),
                         kind: db::files::Kind::MatchReplay,
                         compression: db::files::Compression::Gzip,
                         content: Some(replay),
+                        content_type: db::files::ContentType::PlainText,
                         ..Default::default()
                     },
                 )
@@ -797,7 +798,7 @@ pub async fn cleanup_matches_batch<C: ConnectionTrait + TransactionTrait>(
                 })?.rows_affected;
             let files_deleted = db::files::Entity::delete_many()
                 .filter(Condition::all()
-                     .add(db::files::Column::OwningEntity.eq(db::files::OwningEntity::Match))
+                     .add(db::files::Column::OwningEntity.eq(db::common::EntityKind::Match))
                      .add(db::files::Column::OwningId.is_in(ids.into_iter().map(|idr| idr.id))))
                 .exec(txn)
                 .await
@@ -1028,7 +1029,7 @@ pub async fn read_source_code<C: ConnectionTrait>(
         .read(
             db,
             file_store::Requester::System,
-            db::files::OwningEntity::Program,
+            db::common::EntityKind::Program,
             Some(program_id),
             "",
         )

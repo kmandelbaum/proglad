@@ -39,6 +39,9 @@ pub enum AppHttpError {
 
     #[display(fmt = "Invalid bot name: {}", s)]
     InvalidBotName { s: StringError },
+
+    #[display(fmt = "Invalid entity kind: {}", s)]
+    InvalidEntityKind { s: StringError },
 }
 
 impl actix_web::error::ResponseError for AppHttpError {
@@ -58,6 +61,7 @@ impl actix_web::error::ResponseError for AppHttpError {
             AppHttpError::Unauthorized => StatusCode::UNAUTHORIZED,
             AppHttpError::BotAlreadyExists => StatusCode::CONFLICT,
             AppHttpError::InvalidBotName { .. } => StatusCode::BAD_REQUEST,
+            AppHttpError::InvalidEntityKind { .. } => StatusCode::BAD_REQUEST,
         }
     }
 }

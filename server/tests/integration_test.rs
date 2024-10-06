@@ -6,7 +6,6 @@ mod tests {
 
     use sea_orm::{
         ColumnTrait, DatabaseConnection, EntityTrait, FromQueryResult, QueryFilter, QuerySelect,
-        Set,
     };
     use sea_orm_migration::MigratorTrait;
     use std::path::Path;
@@ -204,7 +203,7 @@ mod tests {
 
         // Check that we have replays for all matches.
         let replay_match_ids = db::files::Entity::find()
-            .filter(db::files::Column::OwningEntity.eq(db::files::OwningEntity::Match))
+            .filter(db::files::Column::OwningEntity.eq(db::common::EntityKind::Match))
             .select_only()
             .column_as(db::files::Column::OwningId, "id")
             .into_model::<IdResult>()
@@ -247,12 +246,18 @@ mod tests {
             "static/games/halma-quad/index.html".to_owned(),
             format!("visualizer/{}", game1_completed_matches[0].id),
             format!("visualizer/{}", game2_completed_matches[0].id),
-            format!("replay/{}", game1_completed_matches[0].id),
-            format!("replay/{}", game2_completed_matches[0].id),
-            format!("source/{public_prog_id}"),
+            format!("files/match/{}", game1_completed_matches[0].id),
+            format!("files/match/{}", game2_completed_matches[0].id),
+            format!("files/program/{public_prog_id}"),
         ];
+        let client = reqwest::ClientBuilder::new()
+            .gzip(true)
+            .build()
+            .expect("Failed to build reqwest client");
         for p in pages_to_test {
-            reqwest::get(format!("{url_prefix}{p}"))
+            client
+                .get(format!("{url_prefix}{p}"))
+                .send()
                 .await
                 .expect(&format!("failed to query page {p}"))
                 .error_for_status()
@@ -322,7 +327,10 @@ mod tests {
         let addr = addrs.first().expect("No bound address found").to_string();
         let url_prefix = format!("http://{addr}/");
 
-        let client = reqwest::Client::new();
+        let client = reqwest::ClientBuilder::new()
+            .gzip(true)
+            .build()
+            .expect("Failed to build reqwest client");
         let source_file = reqwest::multipart::Part::bytes(SIMPLE_BOT_SRC.as_bytes());
         let form = reqwest::multipart::Form::new()
             .text("language", "python")
@@ -348,18 +356,14 @@ mod tests {
             .await
             .expect("Failed to get new bot from db")
             .expect("New bot not found in the db");
-        let update = db::programs::ActiveModel {
-            id: Set(new_bot.program_id),
-            is_public: Set(Some(true)),
-            ..Default::default()
-        };
 
-        db::programs::Entity::update(update)
-            .exec(&t.db)
+        db::acls::set_program_public(&t.db, new_bot.program_id, true)
             .await
-            .expect("Failed to update new program to make it public");
+            .expect("Failed to set bot to public");
 
-        let resp = reqwest::get(format!("{url_prefix}source/{}", new_bot.program_id))
+        let resp = client
+            .get(format!("{url_prefix}files/program/{}", new_bot.program_id))
+            .send()
             .await
             .expect(&format!(
                 "failed to query source code for new bot {:?}",

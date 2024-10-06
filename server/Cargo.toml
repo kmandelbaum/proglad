@@ -24,7 +24,7 @@ ory-kratos-client = { version = "1.1.0" }
 proglad-controller = { workspace = true }
 proglad-db = { workspace = true }
 rand = "0.8.5"
-reqwest = "0.11.27"
+reqwest = { version = "0.11.27", features = ["gzip"] }
 sea-orm = { workspace = true }
 sea-query = { workspace = true }
 serde = { workspace = true }

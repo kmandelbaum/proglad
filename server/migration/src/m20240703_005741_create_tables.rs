@@ -1,4 +1,4 @@
-use proglad_db::{accounts, bots, files, games, prelude::*, programs};
+use proglad_db::{accounts, acls, bots, files, games, prelude::*, programs};
 use sea_orm::entity::prelude::TimeDateTimeWithTimeZone;
 use sea_orm::{EntityTrait, Set};
 use sea_orm_migration::prelude::*;
@@ -22,6 +22,7 @@ impl MigrationTrait for Migration {
         m.create_table(s.create_table_from_entity(MatchParticipations))
             .await?;
         m.create_table(s.create_table_from_entity(Files)).await?;
+        m.create_table(s.create_table_from_entity(Acls)).await?;
         let s = &s;
         let all_idx = [
             idx(s, Accounts),
@@ -31,12 +32,14 @@ impl MigrationTrait for Migration {
             idx(s, Matches),
             idx(s, MatchParticipations),
             idx(s, Files),
+            idx(s, Acls),
         ]
         .into_iter()
         .flatten();
         for i in all_idx {
             m.create_index(i).await?;
         }
+
         let mut owning_entity_and_name_index = Index::create();
         owning_entity_and_name_index
             .name("files-owning-entity-and-name-index")
@@ -47,6 +50,16 @@ impl MigrationTrait for Migration {
         owning_entity_and_name_index.col(files::Column::Name);
         owning_entity_and_name_index.unique();
         m.create_index(owning_entity_and_name_index).await?;
+
+        let mut acl_entity_index = Index::create();
+        acl_entity_index
+            .name("acl-entity-index")
+            .if_not_exists()
+            .table(Acls);
+        acl_entity_index.col(acls::Column::EntityKind);
+        acl_entity_index.col(acls::Column::EntityId);
+        m.create_index(acl_entity_index).await?;
+
         if std::env::var("PROGLAD_POPULATE_DATABASE").is_ok() {
             populate_database(m).await?;
         }
@@ -146,11 +159,13 @@ async fn populate_database_halma_quad<'a, C: ConnectionTrait>(
         .exec(db)
         .await?
         .last_insert_id;
+    acls::set_program_public(db, bot1_program_id, true).await?;
     write_source(db, bot1_program_id, source_code.clone()).await?;
     let bot2_program_id = programs::Entity::insert(bot_program)
         .exec(db)
         .await?
         .last_insert_id;
+    acls::set_program_public(db, bot2_program_id, true).await?;
     write_source(db, bot2_program_id, source_code).await?;
 
     let bot_path = "../games/halma-quad/player-basic/basic.py";
@@ -170,6 +185,7 @@ async fn populate_database_halma_quad<'a, C: ConnectionTrait>(
         .exec(db)
         .await?
         .last_insert_id;
+    acls::set_program_public(db, bot3_program_id, true).await?;
     write_source(db, bot3_program_id, source_code).await?;
 
     let game = games::ActiveModel {
@@ -189,6 +205,7 @@ async fn populate_database_halma_quad<'a, C: ConnectionTrait>(
         .await
         .map_err(|e| DbErr::Custom(format!("{e}")))?
         .last_insert_id;
+    acls::set_game_public(db, game_id, true).await?;
 
     let bot1 = bots::ActiveModel {
         name: Set("halma-quad-greedy-1".to_owned()),
@@ -308,11 +325,13 @@ async fn populate_database_halma_hex<'a, C: ConnectionTrait>(
         .exec(db)
         .await?
         .last_insert_id;
+    acls::set_program_public(db, bot1_program_id, true).await?;
     write_source(db, bot1_program_id, source_code.clone()).await?;
     let bot2_program_id = programs::Entity::insert(bot_program)
         .exec(db)
         .await?
         .last_insert_id;
+    acls::set_program_public(db, bot2_program_id, true).await?;
     write_source(db, bot2_program_id, source_code).await?;
 
     let bot_path = "../games/halma-hex/player-basic/basic.py";
@@ -332,6 +351,7 @@ async fn populate_database_halma_hex<'a, C: ConnectionTrait>(
         .exec(db)
         .await?
         .last_insert_id;
+    acls::set_program_public(db, bot3_program_id, true).await?;
     write_source(db, bot3_program_id, source_code).await?;
 
     let game = games::ActiveModel {
@@ -351,6 +371,7 @@ async fn populate_database_halma_hex<'a, C: ConnectionTrait>(
         .await
         .map_err(|e| DbErr::Custom(format!("{e}")))?
         .last_insert_id;
+    acls::set_game_public(db, game_id, true).await?;
 
     let bot1 = bots::ActiveModel {
         name: Set("halma-hex-greedy-1".to_owned()),
@@ -435,6 +456,7 @@ async fn populate_database_lowest_unique<'a, C: ConnectionTrait>(
         .exec(db)
         .await?
         .last_insert_id;
+    acls::set_program_public(db, bot1_program_id, true).await?;
     write_source(db, bot1_program_id, source_code).await?;
 
     let game = games::ActiveModel {
@@ -452,6 +474,7 @@ async fn populate_database_lowest_unique<'a, C: ConnectionTrait>(
         .await
         .map_err(|e| DbErr::Custom(format!("{e}")))?
         .last_insert_id;
+    acls::set_game_public(db, game_id, true).await?;
 
     for i in 0..10 {
         let bot = bots::ActiveModel {
@@ -478,7 +501,7 @@ async fn write_source<C: ConnectionTrait>(
 ) -> Result<(), DbErr> {
     use proglad_db as db;
     let source_file = db::files::ActiveModel {
-        owning_entity: Set(db::files::OwningEntity::Program),
+        owning_entity: Set(db::common::EntityKind::Program),
         owning_id: Set(Some(program_id)),
         content_type: Set(db::files::ContentType::PlainText),
         kind: Set(db::files::Kind::SourceCode),

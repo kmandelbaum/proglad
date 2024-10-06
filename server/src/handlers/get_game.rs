@@ -91,7 +91,7 @@ async fn get_game(req: HttpRequest, path: web::Path<i64>) -> HttpResult {
             ReferenceBotTmplData {
                 language,
                 source_url: format!(
-                    "{}/source/{}",
+                    "{}/files/program/{}",
                     state.config.site_base_url_path, b.program_id
                 ),
             }

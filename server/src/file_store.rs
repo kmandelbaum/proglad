@@ -6,15 +6,10 @@ use sea_orm::{
     ColumnTrait, Condition, ConnectionTrait, DbErr, EntityTrait, IntoActiveModel, QueryFilter,
 };
 
+pub use crate::acl::Requester;
+
 #[derive(Clone)]
 pub struct FileStore {}
-
-#[derive(Clone, Copy)]
-pub enum Requester {
-    Unauthenticated,
-    System,
-    Account(i64),
-}
 
 #[derive(Debug, Display, Eq, PartialEq)]
 pub enum Error {
@@ -38,7 +33,7 @@ impl FileStore {
     ) -> Result<(), Error> {
         // TODO: ACL
         // TODO: figure out if we want to change last_update here.
-        if file.owning_entity != db::files::OwningEntity::None && file.owning_id.is_none() {
+        if file.owning_entity != db::common::EntityKind::None && file.owning_id.is_none() {
             return Err(Error::InvalidArgument(format!(
                 "Owning entity {:?} is specified file name={}, but not owning ID",
                 file.owning_entity, file.name
@@ -67,12 +62,20 @@ impl FileStore {
     pub async fn read<C: ConnectionTrait>(
         &self,
         db: &C,
-        _requester: Requester,
-        owning_entity: db::files::OwningEntity,
+        requester: Requester,
+        owning_entity: db::common::EntityKind,
         owning_id: Option<i64>,
         name: &str,
     ) -> Result<db::files::Model, Error> {
-        // TODO: ACL
+        crate::acl::check(
+            db,
+            requester,
+            db::acls::AccessType::Read,
+            owning_entity,
+            owning_id,
+        )
+        .await
+        .map_err(acl_error)?;
         let file = db::files::Entity::find()
             .filter(
                 Condition::all()
@@ -93,7 +96,7 @@ impl FileStore {
         &self,
         db: &C,
         _requester: Requester,
-        owning_entity: db::files::OwningEntity,
+        owning_entity: db::common::EntityKind,
         owning_id: Option<i64>,
         name: &str,
     ) -> Result<(), Error> {
@@ -150,6 +153,15 @@ fn compression_error<D: ToString>(e: D) -> Error {
     Error::CompressionError(e.to_string())
 }
 
+fn acl_error(e: crate::acl::Error) -> Error {
+    match e {
+        crate::acl::Error::NotFound(_) => Error::NotFound,
+        crate::acl::Error::Denied => Error::PermissionDenied,
+        crate::acl::Error::InvalidArgument(s) => Error::InvalidArgument(s),
+        crate::acl::Error::DbErr(de) => Error::DbErr(de),
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -169,7 +181,7 @@ mod test {
                 .read(
                     &db,
                     requester,
-                    db::files::OwningEntity::Program,
+                    db::common::EntityKind::Program,
                     Some(123),
                     "myfile-4"
                 )
@@ -177,28 +189,28 @@ mod test {
             Err(Error::NotFound)
         );
         let file1 = db::files::Model {
-            owning_entity: db::files::OwningEntity::Game,
+            owning_entity: db::common::EntityKind::Game,
             owning_id: Some(123),
             content: Some(b"abradabra-1".to_vec()),
             name: "myfile".to_owned(),
             ..Default::default()
         };
         let file2 = db::files::Model {
-            owning_entity: db::files::OwningEntity::Game,
+            owning_entity: db::common::EntityKind::Game,
             owning_id: Some(124),
             content: Some(b"abracaabra-2".to_vec()),
             name: "myfile".to_owned(),
             ..Default::default()
         };
         let file3 = db::files::Model {
-            owning_entity: db::files::OwningEntity::Program,
+            owning_entity: db::common::EntityKind::Program,
             owning_id: Some(123),
             content: Some(b"abracadabra-3-xxx".to_vec()),
             name: "myfile".to_owned(),
             ..Default::default()
         };
         let file4 = db::files::Model {
-            owning_entity: db::files::OwningEntity::Program,
+            owning_entity: db::common::EntityKind::Program,
             owning_id: Some(123),
             content: Some(b"bracadabra-4".to_vec()),
             name: "myfile-4".to_owned(),
@@ -212,7 +224,7 @@ mod test {
             .read(
                 &db,
                 requester,
-                db::files::OwningEntity::Game,
+                db::common::EntityKind::Game,
                 Some(123),
                 "myfile",
             )
@@ -222,7 +234,7 @@ mod test {
             .read(
                 &db,
                 requester,
-                db::files::OwningEntity::Game,
+                db::common::EntityKind::Game,
                 Some(124),
                 "myfile",
             )
@@ -232,7 +244,7 @@ mod test {
             .read(
                 &db,
                 requester,
-                db::files::OwningEntity::Program,
+                db::common::EntityKind::Program,
                 Some(123),
                 "myfile",
             )
@@ -242,7 +254,7 @@ mod test {
             .read(
                 &db,
                 requester,
-                db::files::OwningEntity::Program,
+                db::common::EntityKind::Program,
                 Some(123),
                 "myfile-4",
             )
@@ -255,7 +267,7 @@ mod test {
             .read(
                 &db,
                 requester,
-                db::files::OwningEntity::Program,
+                db::common::EntityKind::Program,
                 Some(123),
                 "myfile-4",
             )
@@ -276,7 +288,7 @@ mod test {
             .delete(
                 &db,
                 requester,
-                db::files::OwningEntity::Program,
+                db::common::EntityKind::Program,
                 Some(123),
                 "myfile-4",
             )
@@ -287,7 +299,7 @@ mod test {
                 .read(
                     &db,
                     requester,
-                    db::files::OwningEntity::Program,
+                    db::common::EntityKind::Program,
                     Some(123),
                     "myfile-4"
                 )
@@ -299,7 +311,7 @@ mod test {
             .read(
                 &db,
                 requester,
-                db::files::OwningEntity::Game,
+                db::common::EntityKind::Game,
                 Some(123),
                 "myfile",
             )
