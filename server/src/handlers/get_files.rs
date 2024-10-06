@@ -35,11 +35,7 @@ async fn get_files_impl(
         "bot" => db::common::EntityKind::Bot,
         "match" => db::common::EntityKind::Match,
         "account" => db::common::EntityKind::Account,
-        _ => {
-            return Err(AppHttpError::InvalidEntityKind {
-                s: StringError(entity_kind_str),
-            })
-        }
+        _ => return Err(AppHttpError::InvalidEntityKind(entity_kind_str)),
     };
     let file = state
         .file_store

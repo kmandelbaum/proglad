@@ -98,9 +98,7 @@ pub async fn kratos_authenticate(
     let account = account.ok_or_else(|| {
         let msg = format!("Email {email} not found in the database.");
         log::error!("{msg}");
-        AppHttpError::DetailedInternal {
-            s: StringError(msg),
-        }
+        AppHttpError::DetailedInternal(msg)
     })?;
     let account_id = account.id;
     session.insert("account_id", account_id).map_err(|e| {

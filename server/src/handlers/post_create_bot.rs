@@ -42,7 +42,7 @@ pub async fn post_create_bot(
         return Err(AppHttpError::Unauthenticated);
     };
     if let Err(e) = validate_bot_name(&form.name) {
-        return Err(AppHttpError::InvalidBotName { s: StringError(e) });
+        return Err(AppHttpError::InvalidBotName(e));
     }
     // TODO: move this thing into engine.
     let txn_result = state

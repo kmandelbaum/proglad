@@ -1,26 +1,16 @@
 use actix_web::http::{header::ContentType, StatusCode};
 use actix_web::HttpResponse;
-use derive_more::{Display, Error};
+use derive_more::Display;
 
 pub type HttpResult = Result<HttpResponse, AppHttpError>;
 
-#[derive(Debug)]
-pub struct StringError(pub String);
-
-impl std::error::Error for StringError {}
-impl std::fmt::Display for StringError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-#[derive(Debug, Display, Error)]
+#[derive(Debug, Display)]
 pub enum AppHttpError {
     #[display(fmt = "Internal error.")]
     Internal,
 
-    #[display(fmt = "Internal error: {}", s)]
-    DetailedInternal { s: StringError },
+    #[display(fmt = "Internal error: {_0}")]
+    DetailedInternal(String),
 
     #[display(fmt = "Bad request.")]
     BadClientData,
@@ -37,12 +27,14 @@ pub enum AppHttpError {
     #[display(fmt = "Bot with the given name already exists. Choose a different name.")]
     BotAlreadyExists,
 
-    #[display(fmt = "Invalid bot name: {}", s)]
-    InvalidBotName { s: StringError },
+    #[display(fmt = "Invalid bot name: {_0}")]
+    InvalidBotName(String),
 
-    #[display(fmt = "Invalid entity kind: {}", s)]
-    InvalidEntityKind { s: StringError },
+    #[display(fmt = "Invalid entity kind: {_0}")]
+    InvalidEntityKind(String),
 }
+
+impl std::error::Error for AppHttpError{}
 
 impl actix_web::error::ResponseError for AppHttpError {
     fn error_response(&self) -> HttpResponse {
@@ -54,14 +46,14 @@ impl actix_web::error::ResponseError for AppHttpError {
     fn status_code(&self) -> StatusCode {
         match *self {
             AppHttpError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
-            AppHttpError::DetailedInternal { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            AppHttpError::DetailedInternal(_) => StatusCode::INTERNAL_SERVER_ERROR,
             AppHttpError::NotFound => StatusCode::NOT_FOUND,
             AppHttpError::BadClientData => StatusCode::BAD_REQUEST,
             AppHttpError::Unauthenticated => StatusCode::UNAUTHORIZED,
             AppHttpError::Unauthorized => StatusCode::UNAUTHORIZED,
             AppHttpError::BotAlreadyExists => StatusCode::CONFLICT,
-            AppHttpError::InvalidBotName { .. } => StatusCode::BAD_REQUEST,
-            AppHttpError::InvalidEntityKind { .. } => StatusCode::BAD_REQUEST,
+            AppHttpError::InvalidBotName(_) => StatusCode::BAD_REQUEST,
+            AppHttpError::InvalidEntityKind(_) => StatusCode::BAD_REQUEST,
         }
     }
 }
