@@ -94,7 +94,7 @@ impl MigrationTrait for Migration {
     }
 }
 
-fn log_err<'a>(ctx: &'a str) -> impl FnOnce(&DbErr) + 'a {
+fn log_err(ctx: &str) -> impl FnOnce(&DbErr) + '_ {
     move |e| {
         eprintln!("{ctx}: {e}");
     }
