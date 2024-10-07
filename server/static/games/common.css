@@ -10,3 +10,9 @@ code {
     border-radius: 2px;
     font-family: monospace;
 }
+
+table, td, th {
+  border: solid 1px;
+  border-collapse: collapse;
+  padding: 5px;
+}

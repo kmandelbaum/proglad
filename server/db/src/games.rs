@@ -7,6 +7,8 @@ pub enum Status {
     Inactive,
     #[sea_orm(string_value = "active")]
     Active,
+    #[sea_orm(string_value = "in-development")]
+    InDevelopment,
 }
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]

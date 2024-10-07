@@ -40,11 +40,9 @@
             <form action="{{base_url_path}}/create_bot/{{game_id}}" method="post" enctype="multipart/form-data">
                 <label for="language">Language:</label>
                 <select id="language" name="language">
-                  <option value="cpp">C++</option>
-                  <option value="go">Go</option>
-                  <!--<option value="java">Java</option>-->
-                  <option value="python">Python</option>
-                  <option value="rust">Rust</option>
+                  {{#each languages}}
+                  <option value="{{value}}" {{#if selected}}selected=1{{/if}}>{{name}}</option>
+                  {{/each}}
                 </select>
                 <label class="file-upload-label">
                   <input type="file" id="file-upload-input" name="file" onchange="file_selected(this);" required/>
@@ -56,12 +54,22 @@
             <div style="padding-top:20px;">
               Example Implementations:
               <br>
+              {{#if reference_bots.[0]}}
               <ul>
                 {{#each reference_bots}}
                   <li><a href="{{this.source_url}}">{{this.language}}</a></li>
                 {{/each}}
               </ul>
+              {{else}}
+                <p>None</p>
+              {{/if}}
             </div>
+            {{#if show_edit}}
+            <hr>
+            <div style="padding-top:20px;">
+                <a href="{{base_url_path}}/edit_game?game_id={{game_id}}" class="button">Edit Game</a>
+            </div>
+            {{/if}}
         </div>
     </div>
 </body>

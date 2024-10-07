@@ -5,7 +5,7 @@ pub use actix_web::http::header::ContentType;
 pub use actix_web::{get, post, web, HttpRequest, HttpResponse, Responder};
 pub use sea_orm::{
     ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
-    TransactionTrait,
+    TransactionTrait, ActiveEnum
 };
 pub use sea_query::IntoCondition;
 pub use serde::{Deserialize, Serialize};
@@ -55,4 +55,17 @@ pub async fn requester(req: &HttpRequest, session: &Session) -> Result<Requester
             }
         }
     }
+}
+
+pub fn language_choices(selected: Option<db::programs::Language>) -> Vec<LanguageChoice> {
+    // TODO: properly support Java.
+    use sea_orm::strum::IntoEnumIterator;
+    db::programs::Language::iter()
+        .filter(|lang| *lang != db::programs::Language::Java)
+        .map(|lang| LanguageChoice {
+            value: lang.to_value(),
+            name: lang.as_str().to_owned(),
+            selected: selected == Some(lang),
+        })
+        .collect()
 }

@@ -20,6 +20,7 @@ body {
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     display: flex;
     flex-direction: column;
+    height: 600px;
 }
 
 .card-header {
@@ -75,22 +76,9 @@ body {
     font-size: 16px;
 }
 
-.button {
-    display: inline-block;
-    padding: 10px 20px;
-    color: #fff;
-    background-color: #007BFF;
-    border: none;
-    border-radius: 4px;
-    text-decoration: none;
-    text-align: center;
-}
-
-.button:hover {
-    background-color: #0056b3;
-}
-
-.card-link:hover {
+.card-link:hover .card-header {
+  background-color: #0056b3;
+  transition: background-color 0.5s ease, transform 0.3s ease;
 }
 
 .card-link {
@@ -103,15 +91,29 @@ body {
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
 }
 
-.emoji-container {
-    position: relative;
-    display: inline-block;
+.add-game-card {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #007BFF;
+    border-radius: 50%;
+    cursor: pointer;
+    width: 60px;
+    height: 60px;
+    margin: auto;
     font-size: 40px;
+    color: white;
+    text-decoration: none;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    transition: background-color 0.5s ease, transform 0.3s ease;
 }
-.play-button {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 16px;
+
+.add-game-card:hover {
+    background-color: #0056b3;
+    transform: scale(1.1);
+}
+
+.add-game-card:focus {
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(0, 123, 255, 0.5);
 }

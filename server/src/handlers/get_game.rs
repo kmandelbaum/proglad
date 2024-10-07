@@ -25,6 +25,8 @@ struct GameTmplData<'a> {
     active_bots_num: usize,
     reference_bots: Vec<ReferenceBotTmplData>,
     matches: Vec<BriefMatchTmplData>,
+    languages: Vec<LanguageChoice>,
+    show_edit: bool,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -159,6 +161,8 @@ async fn get_game(req: HttpRequest, path: web::Path<i64>) -> HttpResult {
                 bots,
                 reference_bots,
                 matches,
+                languages: language_choices(None),
+                show_edit: game.status == db::games::Status::InDevelopment,
             },
         )
         .map_err(|e| {

@@ -21,6 +21,13 @@ pub struct MatchTmplData {
     pub system_message: String,
 }
 
+#[derive(Serialize, Clone)]
+pub struct LanguageChoice {
+    pub name: String,
+    pub value: String,
+    pub selected: bool,
+}
+
 pub async fn match_tmpl_data(
     db: &DatabaseConnection,
     matches: &[db::matches::Model],
