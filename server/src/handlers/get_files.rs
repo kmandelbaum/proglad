@@ -1,4 +1,5 @@
 use crate::handlers::prelude::*;
+use actix_web::http::header::CONTENT_SECURITY_POLICY;
 
 #[get("/files/{entity_kind}/{entity_id}")]
 pub async fn get_files_nameless(
@@ -41,18 +42,7 @@ async fn get_files_impl(
         .file_store
         .read(&state.db, requester, entity_kind, Some(entity_id), &name)
         .await
-        .map_err(|e| match e {
-            file_store::Error::PermissionDenied => AppHttpError::Unauthorized,
-            file_store::Error::NotFound => AppHttpError::NotFound,
-            file_store::Error::FileMissingContent
-            | file_store::Error::CompressionError(_)
-            | file_store::Error::EncodingError
-            | file_store::Error::InvalidArgument(_)
-            | file_store::Error::DbErr(_) => {
-                log::error!("Failed to read file: {e:?}");
-                AppHttpError::Internal
-            }
-        })?;
+        .map_err(file_error_to_http_error)?;
     // TODO: the client might not be expecting compressed output.
     // Check the request headers for whether they accept compressed.
     let mime = match file.content_type {
@@ -68,8 +58,10 @@ async fn get_files_impl(
         }
         proglad_db::files::Compression::Gzip => actix_web::http::header::ContentEncoding::Gzip,
     };
+
     Ok(HttpResponse::Ok()
         .append_header(ContentType(mime))
         .append_header(encoding)
+        .append_header((CONTENT_SECURITY_POLICY, "script-src 'none'"))
         .body(file.content.unwrap_or_default()))
 }

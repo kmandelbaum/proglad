@@ -12,9 +12,6 @@ pub enum AppHttpError {
     #[display(fmt = "Internal error: {_0}")]
     DetailedInternal(String),
 
-    #[display(fmt = "Bad request.")]
-    BadClientData,
-
     #[display(fmt = "Not found.")]
     NotFound,
 
@@ -32,9 +29,24 @@ pub enum AppHttpError {
 
     #[display(fmt = "Invalid entity kind: {_0}")]
     InvalidEntityKind(String),
+
+    #[display(fmt = "Count not determin langauge: {_0}")]
+    CouldNotDetermineLanguage(String),
+
+    #[display(fmt = "Game name already taken: {_0}")]
+    GameNameAlreadyTaken(String),
+
+    #[display(fmt = "Game name validation failes; {_0}")]
+    GameNameValidationFailed(String),
+
+    #[display(fmt = "Unrecognized or unsupported image type: {_0}")]
+    UnsupportedImageType(String),
+
+    #[display(fmt = "Match already scheduled")]
+    MatchAlreadyScheduled,
 }
 
-impl std::error::Error for AppHttpError{}
+impl std::error::Error for AppHttpError {}
 
 impl actix_web::error::ResponseError for AppHttpError {
     fn error_response(&self) -> HttpResponse {
@@ -48,12 +60,16 @@ impl actix_web::error::ResponseError for AppHttpError {
             AppHttpError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
             AppHttpError::DetailedInternal(_) => StatusCode::INTERNAL_SERVER_ERROR,
             AppHttpError::NotFound => StatusCode::NOT_FOUND,
-            AppHttpError::BadClientData => StatusCode::BAD_REQUEST,
             AppHttpError::Unauthenticated => StatusCode::UNAUTHORIZED,
             AppHttpError::Unauthorized => StatusCode::UNAUTHORIZED,
             AppHttpError::BotAlreadyExists => StatusCode::CONFLICT,
             AppHttpError::InvalidBotName(_) => StatusCode::BAD_REQUEST,
             AppHttpError::InvalidEntityKind(_) => StatusCode::BAD_REQUEST,
+            AppHttpError::CouldNotDetermineLanguage(_) => StatusCode::BAD_REQUEST,
+            AppHttpError::GameNameAlreadyTaken(_) => StatusCode::CONFLICT,
+            AppHttpError::GameNameValidationFailed(_) => StatusCode::BAD_REQUEST,
+            AppHttpError::UnsupportedImageType(_) => StatusCode::BAD_REQUEST,
+            AppHttpError::MatchAlreadyScheduled => StatusCode::CONFLICT,
         }
     }
 }

@@ -68,17 +68,20 @@ pub async fn create(config: Config) -> anyhow::Result<Handle> {
             ))
             .app_data(app_state.clone())
             .service(handlers::get_bots::get_bots)
-            .service(handlers::get_matches::get_matches)
+            .service(handlers::get_edit_game::get_edit_game)
+            .service(handlers::get_files::get_files)
+            .service(handlers::get_files::get_files_nameless)
             .service(handlers::get_game::get_game)
             .service(handlers::get_games::get_games)
             .service(handlers::get_index::get_index)
             .service(handlers::get_logout::get_logout)
-            .service(handlers::get_files::get_files)
-            .service(handlers::get_files::get_files_nameless)
+            .service(handlers::get_matches::get_matches)
             .service(handlers::get_visualizer::get_visualizer)
             .service(handlers::kratos_hooks::post_kratos_after_registration_hook)
             .service(handlers::kratos_hooks::post_kratos_after_settings_hook)
             .service(handlers::post_create_bot::post_create_bot)
+            .service(handlers::post_edit_game::post_edit_game)
+            .service(handlers::post_schedule_match::post_schedule_match)
             .service(actix_files::Files::new(
                 "/static",
                 std::path::Path::new(&app_state.config.fs_root_dir).join("static"),

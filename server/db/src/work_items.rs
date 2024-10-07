@@ -42,6 +42,16 @@ pub struct Model {
     pub priority: i64, // Greater value is higher.
 }
 
+impl Model {
+    pub fn last_update_time(&self) -> TimeDateTimeWithTimeZone {
+        match (self.start_time, self.end_time) {
+            (_, Some(et)) => et,
+            (Some(st), None) => st,
+            (None, None) => self.creation_time,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(

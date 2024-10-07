@@ -94,14 +94,3 @@ pub async fn post_create_bot(
         ),
     }
 }
-
-fn parse_language(language: &str) -> Result<db::programs::Language, AppHttpError> {
-    Ok(match language {
-        "cpp" => db::programs::Language::Cpp,
-        "go" => db::programs::Language::Go,
-        "java" => db::programs::Language::Java,
-        "python" => db::programs::Language::Python,
-        "rust" => db::programs::Language::Rust,
-        _ => return Err(AppHttpError::BadClientData),
-    })
-}

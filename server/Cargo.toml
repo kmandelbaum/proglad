@@ -19,6 +19,7 @@ env_logger = "0.11.3"
 flate2 = { workspace = true }
 handlebars = { version = "5.1.2", features = ["dir_source"] }
 log = { workspace = true }
+markdown = "1.0.0-alpha.21"
 mime = "0.3.17"
 ory-kratos-client = { version = "1.1.0" }
 proglad-controller = { workspace = true }

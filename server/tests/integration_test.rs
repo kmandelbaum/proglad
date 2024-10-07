@@ -64,6 +64,7 @@ mod tests {
         };
         let scheduler_config = proglad_server::scheduler::Config {
             enabled: true,
+            run_matches: true,
             scheduler_run_period: Some(std::time::Duration::from_millis(500)),
             match_cleanup_check_period: Some(std::time::Duration::from_secs(2)),
             max_scheduled_work_items: 5,
@@ -117,6 +118,12 @@ mod tests {
             .await
             .expect("Applying initial DB migrations failed");
         let config = config(&path, &test_name, &db_url);
+        tokio::fs::create_dir_all(&config.manager_config.cache_dir)
+            .await
+            .expect("Failed to create compilation cache dir");
+        tokio::fs::create_dir_all(&config.manager_config.match_run_dir)
+            .await
+            .expect("Failed to create match run dir");
         Test { dir, db, config }
     }
 
@@ -136,13 +143,6 @@ mod tests {
             "Expected at least 3 bots in default setup, found: {}",
             bot_ids.len()
         );
-
-        tokio::fs::create_dir_all(&t.config.manager_config.cache_dir)
-            .await
-            .expect("Failed to create compilation cache dir");
-        tokio::fs::create_dir_all(&t.config.manager_config.match_run_dir)
-            .await
-            .expect("Failed to create match run dir");
         let timeout = std::time::Duration::from_secs(120);
         log::info!("Running the server for {timeout:?}");
         let mut handle = proglad_server::server::create(t.config)
@@ -244,6 +244,7 @@ mod tests {
             "game/2".to_owned(),
             "files/game/1/index.html".to_owned(),
             "files/game/2/index.html".to_owned(),
+            "edit_game".to_owned(),
             format!("visualizer/{}", game1_completed_matches[0].id),
             format!("visualizer/{}", game2_completed_matches[0].id),
             format!("files/match/{}", game1_completed_matches[0].id),
@@ -271,12 +272,6 @@ mod tests {
     #[tokio::test]
     async fn create_bot() {
         let t = default_test_setup().await;
-        tokio::fs::create_dir_all(&t.config.manager_config.cache_dir)
-            .await
-            .expect("Failed to create compilation cache dir");
-        tokio::fs::create_dir_all(&t.config.manager_config.match_run_dir)
-            .await
-            .expect("Failed to create match run dir");
         // Cleanup some bots and games, leaving one bot and one game to compile.
         let game = db::games::Entity::find()
             .filter(db::games::Column::Name.eq("lowest-unique"))
@@ -331,11 +326,15 @@ mod tests {
             .gzip(true)
             .build()
             .expect("Failed to build reqwest client");
-        let source_file = reqwest::multipart::Part::bytes(SIMPLE_BOT_SRC.as_bytes());
+        let source_code = tokio::fs::read("../games/lowest-unique/player-random/main.py")
+            .await
+            .expect("Failed to read example source file");
+        let source_file = reqwest::multipart::Part::bytes(source_code.clone());
         let form = reqwest::multipart::Form::new()
             .text("language", "python")
             .text("name", "test-bot-1")
             .part("file", source_file);
+
         let resp = client
             .post(format!("{url_prefix}create_bot/{game_id}"))
             .multipart(form)
@@ -376,8 +375,9 @@ mod tests {
         assert_eq!(
             resp.text()
                 .await
-                .expect("failed to get text from the new program response"),
-            SIMPLE_BOT_SRC
+                .expect("failed to get text from the new program response")
+                .as_bytes(),
+            source_code
         );
 
         // Should be enough to run some matches.
@@ -398,31 +398,66 @@ mod tests {
         let _ = server_join.await;
     }
 
-    const SIMPLE_BOT_SRC: &str = r#"
-import fileinput
-import random
-import sys
+    #[tokio::test]
+    async fn create_game() {
+        let t = default_test_setup().await;
+        db::bots::Entity::delete_many()
+            .exec(&t.db)
+            .await
+            .expect("Failed to delete extraneous bots");
+        db::games::Entity::delete_many()
+            .exec(&t.db)
+            .await
+            .expect("Failed to delete extraneous games");
+        db::programs::Entity::delete_many()
+            .exec(&t.db)
+            .await
+            .expect("Failed to delete extraneous programs");
 
+        let mut handle = proglad_server::server::create(t.config)
+            .await
+            .expect("Failed to create the server");
+        let server_handle = handle.server.handle();
+        let addrs = handle.addrs.clone();
+        let server_join = tokio::task::spawn(async move {
+            let _ = handle.server.await.inspect_err(|e| {
+                log::error!("Running the server failed: {e:?}");
+            });
+        });
+        let addr = addrs.first().expect("No bound address found").to_string();
+        let url_prefix = format!("http://{addr}/");
 
-GAME_START = "start"
-YOUR_MOVE = "yourmove"
+        let gameserver_file = reqwest::multipart::Part::bytes("pass".as_bytes()).file_name("weirdname.py");
+        let markdown_file = reqwest::multipart::Part::bytes("**Bold Test Game**".as_bytes()).file_name("weirdname.md");
+        let icon_file = reqwest::multipart::Part::bytes("<svg></svg>".as_bytes()).file_name("weirdname.svg");
 
-def main():
-    print("ready")
-    sys.stdout.flush()
-    for line in fileinput.input():
-        cmd = list(line.strip().split())
-        if not cmd:
-            break
-        if cmd[0] == GAME_START:
-            N, p, M, R = map(int, cmd[1:])
-        elif cmd[0] == YOUR_MOVE:
-            options = [1.5**i for i in reversed(range(1, M + 1))]
-            [mp] = random.choices(range(1, M + 1), weights=options)
-            print(mp)
-            sys.stdout.flush()
-
-if __name__ == "__main__":
-    main()
-"#;
+        let form = reqwest::multipart::Form::new()
+            .text("game_name", "test-game")
+            .text("description", "Simple Game For Testing")
+            .text("min_players", "2")
+            .text("max_players", "6")
+            .text("language", "python")
+            .text("param_string", "")
+            .part("markdown_file", markdown_file)
+            .part("icon_file", icon_file)
+            .part("gameserver_file", gameserver_file);
+        let client = reqwest::ClientBuilder::new()
+            .gzip(true)
+            .build()
+            .expect("Failed to build reqwest client");
+        let resp = client
+            .post(format!("{url_prefix}edit_game"))
+            .multipart(form)
+            .send()
+            .await
+            .expect("Failed to send edit game request")
+            .error_for_status()
+            .expect("Edit game request failed");
+        let _ = resp
+            .text()
+            .await
+            .expect("Failed to get body after game creation request.");
+        handle.scheduler.cancel();
+        server_handle.stop(true).await;
+    }
 }

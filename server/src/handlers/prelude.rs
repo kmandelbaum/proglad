@@ -4,8 +4,8 @@ pub use actix_session::Session;
 pub use actix_web::http::header::ContentType;
 pub use actix_web::{get, post, web, HttpRequest, HttpResponse, Responder};
 pub use sea_orm::{
-    ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
-    TransactionTrait, ActiveEnum
+    ActiveEnum, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, QueryOrder,
+    QuerySelect, TransactionTrait,
 };
 pub use sea_query::IntoCondition;
 pub use serde::{Deserialize, Serialize};
@@ -13,7 +13,7 @@ pub use serde::{Deserialize, Serialize};
 pub use proglad_db as db;
 
 pub use crate::acl::{self, Requester};
-pub use crate::file_store;
+pub use crate::file_store::{self, FileStore};
 pub use crate::handlers::tmpl_data::*;
 pub use crate::http_types::*;
 pub use crate::kratos::kratos_authenticate;
@@ -78,4 +78,38 @@ pub fn acl_check_to_http_error(err: acl::Error) -> AppHttpError {
         acl::Error::DbErr(_) => AppHttpError::Internal,
         acl::Error::InvalidArgument(_) => AppHttpError::Internal,
     }
+}
+
+pub fn file_error_to_http_error(err: file_store::Error) -> AppHttpError {
+    match err {
+        file_store::Error::PermissionDenied => AppHttpError::Unauthorized,
+        file_store::Error::NotFound => AppHttpError::NotFound,
+        file_store::Error::FileMissingContent
+        | file_store::Error::CompressionError(_)
+        | file_store::Error::EncodingError
+        | file_store::Error::InvalidArgument(_)
+        | file_store::Error::DbErr(_) => {
+            log::error!("File operation failed: {err:?}");
+            AppHttpError::Internal
+        }
+    }
+}
+
+pub fn parse_language(language: &str) -> Result<db::programs::Language, AppHttpError> {
+    Ok(match language {
+        "cpp" => db::programs::Language::Cpp,
+        "go" => db::programs::Language::Go,
+        "java" => db::programs::Language::Java,
+        "python" => db::programs::Language::Python,
+        "rust" => db::programs::Language::Rust,
+        _ => return Err(AppHttpError::CouldNotDetermineLanguage(language.to_owned())),
+    })
+}
+
+pub fn bot_status(bot: &db::bots::Model, program: Option<&db::programs::Model>) -> String {
+    format!(
+        "{:?} | {}",
+        bot.system_status,
+        program.map_or("No program".to_owned(), |p| format!("{:?}", p.status))
+    )
 }

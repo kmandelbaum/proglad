@@ -80,11 +80,7 @@ pub async fn get_bots(
         .map(|b| {
             let program = programs.get(&b.program_id);
             let game = games.get(&b.game_id);
-            let status = format!(
-                "{:?} | {}",
-                b.system_status,
-                program.map_or("No program".to_owned(), |p| format!("{:?}", p.status))
-            );
+            let status = bot_status(&b, program);
             let updated = program.map_or(b.status_update_time, |p| {
                 p.status_update_time.max(b.status_update_time)
             });

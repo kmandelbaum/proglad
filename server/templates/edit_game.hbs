@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}}</title>
+    <link rel="stylesheet" href="{{base_url_path}}/static/edit_game.css">
+    <script>
+      window.addEventListener('pageshow', (event) => {
+        update_file_name('gameserver');
+        update_file_name('markdown');
+        update_file_name('icon');
+        update_file_name('bot');
+      });
+      function update_file_name(name) {
+        var f = document.getElementById(name + '-file-upload-input').files[0];
+        if (f === undefined) {
+          return;
+        }
+        document.getElementById(name + '-file-upload-label-text').textContent = f.name;
+      }
+    </script>
+</head>
+<body>
+    <div class="column-container">
+      <div class="container">
+        <h1>{{title}}</h1>
+        <form method="POST" enctype="multipart/form-data">
+            <label for="game_name" class="form-label">Game Name</label>
+            <input type="text" id="game_name" name="game_name" value="{{game_name}}" required>
+
+            <label for="description" class="form-label">Description</label>
+            <textarea id="description" name="description" rows="4" required>{{description}}</textarea>
+            <div class="compact-fields">
+                <div class="compact-elem">
+                    <label for="min_players" class="form-label">Min Players</label>
+                    <input type="number" id="min_players" name="min_players" min="1" max="16" value="{{min_players}}" required>
+                </div>
+                <div class="compact-elem">
+                    <label for="max_players" class="form-label">Max Players</label>
+                    <input type="number" id="max_players" name="max_players" min="1" max="16" value="{{max_players}}" required>
+                </div>
+                <div class="compact-elem">
+                    <label class="file-upload-label">
+                      <input type="file" id="gameserver-file-upload-input" name="gameserver_file" onchange="update_file_name('gameserver');"/>
+                      <span id="gameserver-file-upload-label-text">Upload Game Server Source</span>
+                    </label>
+                </div>
+                <div class="compact-elem">
+                  <select id="language" name="language">
+                    {{#each languages}}
+                    <option value="{{value}}" {{#if selected}}selected=1{{/if}}>{{name}}</option>
+                    {{/each}}
+                  </select>
+                </div>
+                <div class="compact-elem">
+                    <label class="file-upload-label">
+                      <input type="file" id="markdown-file-upload-input" name="markdown_file" onchange="update_file_name('markdown');"/>
+                      <span id="markdown-file-upload-label-text">Upload Rules Markdown</span>
+                    </label>
+                </div>
+                <div class="compact-elem">
+                    <label class="file-upload-label">
+                      <input type="file" id="icon-file-upload-input" name="icon_file" onchange="update_file_name('icon');"/>
+                      <span id="icon-file-upload-label-text">Upload Icon (svg)</span>
+                    </label>
+                </div>
+                <div class="fullwidth-elem">
+                    <label for="param_string" class="form-label">Param String</label>
+                    <input type="text" id="param_string" name="param_string" value="{{param}}">
+                </div>
+                <button type="submit" class="button fullwidth-elem">Submit</button>
+            </div>
+        </form>
+      </div>
+      {{#if program}}
+      <div class="container">
+        <h1>Game Server Status</h1>
+        <table>
+          <tr>
+            <th>Source</th>
+            <th>Language</th>
+            <th>Updated</th>
+            <th>Status</th>
+          </tr>
+          <tr>
+            <td><a href="{{base_url_path}}/files/program/{{program.id}}">Code</a></td>
+            <td>{{program.language}}</td>
+            <td>{{program.updated}}</td>
+            <td>{{program.status}}</td>
+          </tr>
+        </table>
+      </div>
+      {{/if}}
+    </div>
+    {{#if game_id}}
+      <div class="column-container">
+        <div class="container">
+          <h1 id="bots-header">Upload Bots</h1>
+          <form target="_blank" action="{{base_url_path}}/create_bot/{{game_id}}" method="post" enctype="multipart/form-data">
+            <div class="compact-fields">
+              <div class="compact-elem">
+                <label class="file-upload-label">
+                  <input type="file" id="bot-file-upload-input" name="file" onchange="update_file_name('bot');" required/>
+                  <span id="bot-file-upload-label-text">Upload Source Code</span>
+                </label>
+              </div>
+              <div class="compact-elem">
+                <select id="language" name="language">
+                  {{#each languages}}
+                  <option value="{{value}}">{{name}}</option>
+                  {{/each}}
+                </select>
+              </div>
+              <div class="compact-elem">
+                <input type="text" id="name" name="name" placeholder="Bot name"</input>
+              </div>
+              <div class="fullwidth-elem">
+                <button type="submit">Submit</button>
+              </div>
+            </div>
+          </form>
+          <table style="margin-top: 10px;">
+            <tr>
+              <th>Name</th>
+              <th>Status</th>
+              <!--<th>Actions</th>-->
+            </tr>
+            {{#each bots}}
+              <tr>
+                <td>{{name}}</td>
+                <td>{{status}}</td>
+                <!--
+                <td>
+                  <a href="{{../base_url_path}}/delete_bot?bot_id={{bot_id}}&redirect=edit_game">Delete</a>
+                </td>
+                -->
+              </tr>
+            {{/each}}
+          </table>
+        </div>
+        {{#if matches}}
+        <div class="container">
+          <h1 id="matches-header">Matches</h1>
+          {{#if matches.unstartable_reason}}
+            <span class="infotext">{{matches.unstartable_reason}}</span>
+          {{else}}
+            <form action="{{base_url_path}}/schedule_match/{{game_id}}" method="post">
+              <button type="submit">Schedule</button>
+            </form>
+            <table>
+              <tr>
+                <th>Link</th>
+                <th>Update time</th>
+                <th>Status</th>
+              </tr>
+              {{#each matches.matches}}
+              <tr>
+                <td>
+                  {{#if match_id}}
+                  <a href={{../base_url_path}}/visualizer/{{match_id}}>
+                    {{match_id}}
+                  </a>
+                  {{/if}}
+                </td>
+                <td>{{update_time}}</td>
+                <td>{{status}}</td>
+              <tr>
+              {{/each}}
+            </table>
+          {{/if}}
+        </div>
+        {{/if}}
+      </div>
+    {{/if}}
+</body>
+</html>

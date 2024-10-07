@@ -724,7 +724,7 @@ pub async fn cleanup_matches_batch<C: ConnectionTrait + TransactionTrait>(
     db: &C,
     config: &CleanupConfig,
 ) -> Result<(), MyDbError> {
-    log::info!("Starting stale match cleanup.");
+    log::trace!("Starting stale match cleanup.");
     // TODO: consider querying only active games.
     let game_ids = db::games::Entity::find()
         .select_only()
@@ -745,7 +745,7 @@ pub async fn cleanup_matches_batch<C: ConnectionTrait + TransactionTrait>(
         )
     "#;
     for IdResult { id: game_id } in game_ids {
-        log::info!("Cleaning up matches of game {game_id}.");
+        log::trace!("Cleaning up matches of game {game_id}.");
         let stmt = sea_orm::Statement::from_sql_and_values(
             db.get_database_backend(),
             sql,
@@ -765,7 +765,7 @@ pub async fn cleanup_matches_batch<C: ConnectionTrait + TransactionTrait>(
             time: Some(threshold),
         }) = threshold_query_result
         else {
-            log::info!("No matches found for game {game_id}, skipping cleanup.");
+            log::trace!("No matches found for game {game_id}, skipping cleanup.");
             continue;
         };
         log::trace!("Match staleness threshold = {threshold:?} for game {game_id}.");
@@ -830,24 +830,26 @@ pub async fn scheduling_round<C: ConnectionTrait>(
         log::info!("Enough work is scheduled, skipping scheduling round");
         return Ok(());
     }
-    let active_games: Vec<i64> = db::games::Entity::find()
-        .filter(db::games::Column::Status.eq(db::games::Status::Active))
-        .select_only()
-        .column(db::games::Column::Id)
-        .into_values::<i64, db::games::Column>()
-        .all(db)
-        .await
-        .context("Failed to fetch active games")?;
-    if active_games.is_empty() {
-        log::info!("No active games found, skipping scheduling round.");
-        return Ok(());
-    }
-    for game_id in active_games {
-        let _ = schedule_match_for_game(db, game_id, config.match_run_default_priority)
+    if config.run_matches {
+        let active_games: Vec<i64> = db::games::Entity::find()
+            .filter(db::games::Column::Status.eq(db::games::Status::Active))
+            .select_only()
+            .column(db::games::Column::Id)
+            .into_values::<i64, db::games::Column>()
+            .all(db)
             .await
-            .inspect_err(|e| {
-                log::error!("Failed to schedule match for game {game_id}: {e:?}");
-            });
+            .context("Failed to fetch active games")?;
+        if active_games.is_empty() {
+            log::info!("No active games found, skipping scheduling round.");
+            return Ok(());
+        }
+        for game_id in active_games {
+            let _ = schedule_match_for_game(db, game_id, config.match_run_default_priority)
+                .await
+                .inspect_err(|e| {
+                    log::error!("Failed to schedule match for game {game_id}: {e:?}");
+                });
+        }
     }
 
     let scheduled_compilation_program_ids = scheduled_work.iter().filter_map(|w| {
@@ -881,7 +883,7 @@ pub async fn scheduling_round<C: ConnectionTrait>(
     Ok(())
 }
 
-async fn schedule_match_for_game<C: ConnectionTrait>(
+pub async fn schedule_match_for_game<C: ConnectionTrait>(
     db: &C,
     game_id: i64,
     priority: i64,
@@ -970,7 +972,7 @@ pub async fn select_and_run_work_item<C: ConnectionTrait + TransactionTrait>(
         .await
         .context("Transaction failed")?;
     let Some(work_item) = work_item else {
-        log::info!("No scheduled work found.");
+        log::trace!("No scheduled work found.");
         return Ok(());
     };
     let work_item_id = work_item.id;

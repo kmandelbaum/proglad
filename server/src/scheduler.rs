@@ -33,6 +33,7 @@ impl Handle {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
     pub enabled: bool,
+    pub run_matches: bool,
     pub scheduler_run_period: Option<std::time::Duration>,
     pub match_cleanup_check_period: Option<std::time::Duration>,
     pub max_scheduled_work_items: usize,

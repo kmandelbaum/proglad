@@ -107,8 +107,10 @@ async fn db_get_latest_match_with_replay_for_game(
     match_id.ok_or_else(|| DbErr::RecordNotFound(format!("replay for game {game_id}")))
 }
 
-async fn db_allowed_games<C: ConnectionTrait>(db: &C, requester: Requester)
-    -> Result<Vec<db::games::Model>, AppHttpError> {
+async fn db_allowed_games<C: ConnectionTrait>(
+    db: &C,
+    requester: Requester,
+) -> Result<Vec<db::games::Model>, AppHttpError> {
     let all_games = db::prelude::Games::find()
         .order_by_asc(db::games::Column::Id)
         .all(db)
@@ -120,10 +122,22 @@ async fn db_allowed_games<C: ConnectionTrait>(db: &C, requester: Requester)
     let mut games = vec![];
     // TODO: batch acl check API.
     for g in all_games.into_iter() {
-        match acl::check(db, requester, db::acls::AccessType::Read, db::common::EntityKind::Game, Some(g.id)).await {
+        match acl::check(
+            db,
+            requester,
+            db::acls::AccessType::Read,
+            db::common::EntityKind::Game,
+            Some(g.id),
+        )
+        .await
+        {
             Ok(()) => games.push(g),
             Err(e) => {
-                log::warn!("Filtered out game {}({}) because acl check failed: {e:?}", g.name, g.id);
+                log::warn!(
+                    "Filtered out game {}({}) because acl check failed: {e:?}",
+                    g.name,
+                    g.id
+                );
             }
         }
     }

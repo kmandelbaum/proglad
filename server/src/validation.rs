@@ -35,6 +35,26 @@ pub fn validate_account_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+pub fn validate_game_name(name: &str) -> Result<(), String> {
+    // TODO: more thorough validation.
+    const MAX: usize = 30;
+    if !(1..=MAX).contains(&name.len()) {
+        return Err(format!("Game name must be in range [1..{MAX}]"));
+    }
+    Ok(())
+}
+
+pub fn validate_players_number(p: i32) -> Result<(), String> {
+    const MAX: i32 = 16;
+    if p < 0 {
+        return Err(format!("{p} expected to be non-negative"));
+    }
+    if p > 16 {
+        return Err(format!("{p} expected to be not more than {MAX}"));
+    }
+    Ok(())
+}
+
 fn char_allowed(c: char) -> bool {
     c.is_alphanumeric() && c.is_ascii() || c == '-' || c == '_'
 }
