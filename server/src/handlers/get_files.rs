@@ -60,6 +60,7 @@ async fn get_files_impl(
         proglad_db::files::ContentType::PlainText => mime::TEXT_PLAIN,
         proglad_db::files::ContentType::Html => mime::TEXT_HTML,
         proglad_db::files::ContentType::Png => mime::IMAGE_PNG,
+        proglad_db::files::ContentType::Svg => mime::IMAGE_SVG,
     };
     let encoding = match file.compression {
         proglad_db::files::Compression::Uncompressed => {

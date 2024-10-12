@@ -20,6 +20,7 @@ pub enum ContentType {
     PlainText = 1,
     Html = 2,
     Png = 3,
+    Svg = 4,
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, EnumIter, DeriveActiveEnum)]
