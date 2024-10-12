@@ -34,7 +34,7 @@ pub enum AccessType {
 }
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "acl")]
+#[sea_orm(table_name = "acls")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
