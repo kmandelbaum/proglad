@@ -30,7 +30,7 @@ async fn get_files_impl(
     let requester = requester(&req, &session).await?;
     let state = server_state(&req)?;
     let entity_kind = match entity_kind_str.as_str() {
-        "game" => db::common::EntityKind::Program,
+        "game" => db::common::EntityKind::Game,
         "program" => db::common::EntityKind::Program,
         "bot" => db::common::EntityKind::Bot,
         "match" => db::common::EntityKind::Match,

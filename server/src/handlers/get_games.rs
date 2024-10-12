@@ -67,8 +67,8 @@ pub async fn get_games(req: HttpRequest) -> HttpResult {
             title: g.name.clone(),
             description: g.description,
             image_src: format!(
-                "{}/static/games/{}/icon.svg",
-                state.config.site_base_url_path, g.name
+                "{}/files/game/{}/icon.svg",
+                state.config.site_base_url_path, g.id
             ),
             url: format!("{}/game/{}", state.config.site_base_url_path, g.id),
             num_bots: bot_counts.get(&g.id).cloned().unwrap_or_default(),

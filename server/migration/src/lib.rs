@@ -6,6 +6,7 @@ mod m20240908_140157_create_stats_history;
 mod m20240920_235707_create_work_items;
 mod m20241001_210358_create_files_table;
 mod m20241006_193744_create_acls_table;
+mod m20241012_214559_populate_assets;
 
 pub struct Migrator;
 
@@ -19,6 +20,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240920_235707_create_work_items::Migration),
             Box::new(m20241001_210358_create_files_table::Migration),
             Box::new(m20241006_193744_create_acls_table::Migration),
+            Box::new(m20241012_214559_populate_assets::Migration),
         ]
     }
 }

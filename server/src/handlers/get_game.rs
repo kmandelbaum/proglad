@@ -51,8 +51,8 @@ async fn get_game(req: HttpRequest, path: web::Path<i64>) -> HttpResult {
         return Err(AppHttpError::NotFound);
     };
     let url = format!(
-        "{}/static/games/{}/index.html",
-        state.config.site_base_url_path, game.name
+        "{}/files/game/{}/index.html",
+        state.config.site_base_url_path, game.id
     );
     let bots = db_active_bots_of_game(&state.db, game_id)
         .await
