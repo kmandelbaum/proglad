@@ -30,14 +30,7 @@ pub async fn post_create_bot(
         Some(game_id),
     )
     .await
-    .map_err(|e| match e {
-        crate::acl::Error::Denied => AppHttpError::Unauthorized,
-        crate::acl::Error::NotFound(_) => AppHttpError::NotFound,
-        crate::acl::Error::DbErr(_) | crate::acl::Error::InvalidArgument(_) => {
-            log::error!("Error while checking acl: {e:?}");
-            AppHttpError::Internal
-        }
-    })?;
+    .map_err(acl_check_to_http_error)?;
     let Requester::Account(owner) = requester else {
         return Err(AppHttpError::Unauthenticated);
     };

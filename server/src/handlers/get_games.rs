@@ -1,4 +1,5 @@
 use crate::handlers::prelude::*;
+use sea_orm::ConnectionTrait;
 
 #[derive(Serialize)]
 struct GamesTmplData<'a> {
@@ -19,17 +20,11 @@ struct GameCardTmplData {
 }
 
 #[get("/games")]
-pub async fn get_games(req: HttpRequest) -> HttpResult {
+pub async fn get_games(req: HttpRequest, session: Session) -> HttpResult {
     let state = server_state(&req)?;
+    let requester = requester(&req, &session).await?;
 
-    let games: Vec<db::games::Model> = db::prelude::Games::find()
-        .order_by_asc(db::games::Column::Id)
-        .all(&state.db)
-        .await
-        .map_err(|e| {
-            log::error!("Failed to select games from db: {e}");
-            AppHttpError::Internal
-        })?;
+    let games = db_allowed_games(&state.db, requester).await?;
     let bot_game_ids: Vec<(i64, i64)> = db::prelude::Bots::find()
         .select_only()
         .column(db::bots::Column::GameId)
@@ -110,4 +105,27 @@ async fn db_get_latest_match_with_replay_for_game(
         .one(db)
         .await?;
     match_id.ok_or_else(|| DbErr::RecordNotFound(format!("replay for game {game_id}")))
+}
+
+async fn db_allowed_games<C: ConnectionTrait>(db: &C, requester: Requester)
+    -> Result<Vec<db::games::Model>, AppHttpError> {
+    let all_games = db::prelude::Games::find()
+        .order_by_asc(db::games::Column::Id)
+        .all(db)
+        .await
+        .map_err(|e| {
+            log::error!("Failed to select games from db: {e}");
+            AppHttpError::Internal
+        })?;
+    let mut games = vec![];
+    // TODO: batch acl check API.
+    for g in all_games.into_iter() {
+        match acl::check(db, requester, db::acls::AccessType::Read, db::common::EntityKind::Game, Some(g.id)).await {
+            Ok(()) => games.push(g),
+            Err(e) => {
+                log::warn!("Filtered out game {}({}) because acl check failed: {e:?}", g.name, g.id);
+            }
+        }
+    }
+    Ok(games)
 }

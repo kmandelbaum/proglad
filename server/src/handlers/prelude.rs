@@ -12,7 +12,7 @@ pub use serde::{Deserialize, Serialize};
 
 pub use proglad_db as db;
 
-pub use crate::acl::Requester;
+pub use crate::acl::{self, Requester};
 pub use crate::file_store;
 pub use crate::handlers::tmpl_data::*;
 pub use crate::http_types::*;
@@ -68,4 +68,14 @@ pub fn language_choices(selected: Option<db::programs::Language>) -> Vec<Languag
             selected: selected == Some(lang),
         })
         .collect()
+}
+
+pub fn acl_check_to_http_error(err: acl::Error) -> AppHttpError {
+    log::error!("Error while checking ACL: {err:?}");
+    match err {
+        acl::Error::Denied => AppHttpError::Unauthorized,
+        acl::Error::NotFound(_) => AppHttpError::NotFound,
+        acl::Error::DbErr(_) => AppHttpError::Internal,
+        acl::Error::InvalidArgument(_) => AppHttpError::Internal,
+    }
 }

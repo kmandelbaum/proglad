@@ -36,7 +36,7 @@ struct BriefMatchTmplData {
 }
 
 #[get("/game/{game_id}")]
-async fn get_game(req: HttpRequest, path: web::Path<i64>) -> HttpResult {
+async fn get_game(req: HttpRequest, session: Session, path: web::Path<i64>) -> HttpResult {
     let game_id = *path;
     let state = server_state(&req)?;
     // TODO: a custom select to fetch everything instead.
@@ -50,6 +50,16 @@ async fn get_game(req: HttpRequest, path: web::Path<i64>) -> HttpResult {
     else {
         return Err(AppHttpError::NotFound);
     };
+    let requester = requester(&req, &session).await?;
+    acl::check(
+        &state.db,
+        requester,
+        db::acls::AccessType::Read,
+        db::common::EntityKind::Game,
+        Some(game_id),
+    )
+    .await
+    .map_err(acl_check_to_http_error)?;
     let url = format!(
         "{}/files/game/{}/index.html",
         state.config.site_base_url_path, game.id
