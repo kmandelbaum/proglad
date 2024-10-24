@@ -427,24 +427,31 @@ mod tests {
         let addr = addrs.first().expect("No bound address found").to_string();
         let url_prefix = format!("http://{addr}/");
 
-        let gameserver_file = reqwest::multipart::Part::bytes("pass".as_bytes()).file_name("weirdname.py");
-        let markdown_file = reqwest::multipart::Part::bytes("**Bold Test Game**".as_bytes()).file_name("weirdname.md");
-        let icon_file = reqwest::multipart::Part::bytes("<svg></svg>".as_bytes()).file_name("weirdname.svg");
+        let source_code = tokio::fs::read("../games/lowest-unique/server/main.rs")
+            .await
+            .expect("Failed to read gameserver source code");
+        let gameserver_file =
+            reqwest::multipart::Part::bytes(source_code).file_name("weirdname.rs");
+        let markdown_file = reqwest::multipart::Part::bytes("**Bold Test Game**".as_bytes())
+            .file_name("weirdname.md");
+        let icon_file =
+            reqwest::multipart::Part::bytes("<svg></svg>".as_bytes()).file_name("weirdname.svg");
 
-        let form = reqwest::multipart::Form::new()
-            .text("game_name", "test-game")
-            .text("description", "Simple Game For Testing")
-            .text("min_players", "2")
-            .text("max_players", "6")
-            .text("language", "python")
-            .text("param_string", "")
-            .part("markdown_file", markdown_file)
-            .part("icon_file", icon_file)
-            .part("gameserver_file", gameserver_file);
         let client = reqwest::ClientBuilder::new()
             .gzip(true)
             .build()
             .expect("Failed to build reqwest client");
+
+        let form = reqwest::multipart::Form::new()
+            .text("game_name", "test-game")
+            .text("description", "Simple Game For Testing")
+            .text("min_players", "3")
+            .text("max_players", "6")
+            .text("language", "rust")
+            .text("param_string", "{num_players} 10 500")
+            .part("markdown_file", markdown_file)
+            .part("icon_file", icon_file)
+            .part("gameserver_file", gameserver_file);
         let resp = client
             .post(format!("{url_prefix}edit_game"))
             .multipart(form)
@@ -457,7 +464,82 @@ mod tests {
             .text()
             .await
             .expect("Failed to get body after game creation request.");
+
+        let games = db::games::Entity::find()
+            .all(&t.db)
+            .await
+            .expect("Failed to get games from the db");
+        assert_eq!(games.len(), 1);
+        let game_id = games[0].id;
+
+        let source_code = tokio::fs::read("../games/lowest-unique/player-random/main.py")
+            .await
+            .expect("Failed to read example source file");
+        let create_bot = |name| {
+            let source_code = &source_code;
+            let client = &client;
+            let url_prefix = &url_prefix;
+            async move {
+                let source_file = reqwest::multipart::Part::bytes(source_code.clone());
+                let form = reqwest::multipart::Form::new()
+                    .text("language", "python")
+                    .text("name", name)
+                    .part("file", source_file);
+                let resp = client
+                    .post(format!("{url_prefix}create_bot/{game_id}"))
+                    .multipart(form)
+                    .send()
+                    .await
+                    .expect("Failed to send create bot request")
+                    .error_for_status()
+                    .expect("Create bot request failed");
+                let body = resp
+                    .text()
+                    .await
+                    .expect("Failed to get body after bot creation request.");
+                assert!(body.contains(name), "{body}");
+            }
+        };
+        create_bot("test-bot-1").await;
+        create_bot("test-bot-2").await;
+        create_bot("test-bot-3").await;
+
+        // Should be enough to compile.
+        let timeout = std::time::Duration::from_secs(10);
+        tokio::time::sleep(timeout).await;
+
+        let _ = client
+            .post(format!("{url_prefix}schedule_match/{game_id}"))
+            .send()
+            .await
+            .expect("Failed to send schedule match request")
+            .error_for_status()
+            .expect("Create bot request failed");
+
+        // Should be enough to run a match.
+        let timeout = std::time::Duration::from_secs(10);
+        tokio::time::sleep(timeout).await;
+
+        let matches = db::matches::Entity::find()
+            .all(&t.db)
+            .await
+            .expect("Failed to fetch matches from DB");
+        assert!(!matches.is_empty(), "No matches were played");
+        let match_id = matches[0].id;
+        let body = client
+            .get(format!("{url_prefix}files/match/{match_id}"))
+            .send()
+            .await
+            .expect("Failed to get match replay")
+            .error_for_status()
+            .expect("Match replay request return error status")
+            .text()
+            .await
+            .expect("Failed to get match replay text");
+        assert!(body.contains("over"), "Match ran but was not successful. Replay:\n{body}");
+
         handle.scheduler.cancel();
         server_handle.stop(true).await;
+        let _ = server_join.await;
     }
 }

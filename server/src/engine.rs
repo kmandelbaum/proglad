@@ -839,10 +839,6 @@ pub async fn scheduling_round<C: ConnectionTrait>(
             .all(db)
             .await
             .context("Failed to fetch active games")?;
-        if active_games.is_empty() {
-            log::info!("No active games found, skipping scheduling round.");
-            return Ok(());
-        }
         for game_id in active_games {
             let _ = schedule_match_for_game(db, game_id, config.match_run_default_priority)
                 .await
