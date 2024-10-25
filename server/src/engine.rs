@@ -94,7 +94,7 @@ pub async fn run_match<C: ConnectionTrait + TransactionTrait>(
     agents.push(manager::Agent {
         id: data.game_program.id,
         language: from_db_language(data.game_program.language),
-        param: [make_param(&data), "inlinevisualize".to_owned()].join(" "),
+        param: make_param(&data),
     });
     for p in data.bot_programs.into_iter() {
         let agent = manager::Agent {

@@ -198,6 +198,7 @@ async fn populate_database_halma_quad<'a, C: ConnectionTrait>(
         status: Set(games::Status::Active),
         min_players: Set(2),
         max_players: Set(2),
+        param: Set(Some("inlinevisualize".to_owned())),
         ..Default::default()
     };
     let game_id = games::Entity::insert(game)
@@ -364,6 +365,7 @@ async fn populate_database_halma_hex<'a, C: ConnectionTrait>(
         status: Set(games::Status::Active),
         min_players: Set(2),
         max_players: Set(2),
+        param: Set(Some("inlinevisualize".to_owned())),
         ..Default::default()
     };
     let game_id = games::Entity::insert(game)
@@ -464,7 +466,7 @@ async fn populate_database_lowest_unique<'a, C: ConnectionTrait>(
         description: Set("Pick a number. Lowest unique number wins.".to_owned()),
         program_id: Set(game_program_id),
         status: Set(games::Status::Active),
-        param: Set(Some("{num_players} 10 500".to_owned())),
+        param: Set(Some("{num_players} 10 500 inlinevisualize".to_owned())),
         min_players: Set(3),
         max_players: Set(6),
         ..Default::default()

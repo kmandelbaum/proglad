@@ -448,7 +448,7 @@ mod tests {
             .text("min_players", "3")
             .text("max_players", "6")
             .text("language", "rust")
-            .text("param_string", "{num_players} 10 500")
+            .text("param_string", "{num_players} 10 500 inlinevisualize")
             .part("markdown_file", markdown_file)
             .part("icon_file", icon_file)
             .part("gameserver_file", gameserver_file);
@@ -536,7 +536,8 @@ mod tests {
             .text()
             .await
             .expect("Failed to get match replay text");
-        assert!(body.contains("over"), "Match ran but was not successful. Replay:\n{body}");
+        assert!(body.contains(" over "), "Match ran but was not successful. Replay:\n{body}");
+        assert!(body.contains(" vis "), "No visualizer commands in the replay:\n{body}");
 
         handle.scheduler.cancel();
         server_handle.stop(true).await;
