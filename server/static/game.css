@@ -23,6 +23,7 @@ body {
 .left-column, .right-column {
     padding: 20px;
     background-color: #f8f8f8;
+    overflow: hidden;
 }
 
 .left-column ul {
