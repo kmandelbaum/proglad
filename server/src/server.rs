@@ -80,6 +80,7 @@ pub async fn create(config: Config) -> anyhow::Result<Handle> {
             .service(handlers::kratos_hooks::post_kratos_after_registration_hook)
             .service(handlers::kratos_hooks::post_kratos_after_settings_hook)
             .service(handlers::post_create_bot::post_create_bot)
+            .service(handlers::post_edit_bot::post_edit_bot)
             .service(handlers::post_edit_game::post_edit_game)
             .service(handlers::post_schedule_match::post_schedule_match)
             .service(actix_files::Files::new(

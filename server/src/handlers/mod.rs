@@ -12,5 +12,6 @@ pub mod get_matches;
 pub mod get_visualizer;
 pub mod kratos_hooks;
 pub mod post_create_bot;
+pub mod post_edit_bot;
 pub mod post_edit_game;
 pub mod post_schedule_match;

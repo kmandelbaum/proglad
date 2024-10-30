@@ -63,7 +63,7 @@ pub async fn post_create_bot(
                     }
                 }
 
-                engine::create_bot(
+                let bot_id = engine::create_bot(
                     txn,
                     &file_store,
                     game_id,
@@ -77,6 +77,7 @@ pub async fn post_create_bot(
                     log::info!("Failed to create bot for game {game_id}: {e:?}");
                     AppHttpError::Internal
                 })?;
+                acl::add_rw(txn, requester, db::common::EntityKind::Bot, bot_id).await?;
                 Ok(())
             })
         })

@@ -44,6 +44,9 @@ pub enum AppHttpError {
 
     #[display(fmt = "Match already scheduled")]
     MatchAlreadyScheduled,
+
+    #[display(fmt = "No edit bot action is specified")]
+    NoEditBotActionSpecified,
 }
 
 impl std::error::Error for AppHttpError {}
@@ -70,6 +73,7 @@ impl actix_web::error::ResponseError for AppHttpError {
             AppHttpError::GameNameValidationFailed(_) => StatusCode::BAD_REQUEST,
             AppHttpError::UnsupportedImageType(_) => StatusCode::BAD_REQUEST,
             AppHttpError::MatchAlreadyScheduled => StatusCode::CONFLICT,
+            AppHttpError::NoEditBotActionSpecified => StatusCode::BAD_REQUEST,
         }
     }
 }

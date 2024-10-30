@@ -107,9 +107,12 @@ pub fn parse_language(language: &str) -> Result<db::programs::Language, AppHttpE
 }
 
 pub fn bot_status(bot: &db::bots::Model, program: Option<&db::programs::Model>) -> String {
-    format!(
-        "{:?} | {}",
-        bot.system_status,
-        program.map_or("No program".to_owned(), |p| format!("{:?}", p.status))
-    )
+    match bot.owner_set_status {
+        db::bots::OwnerSetStatus::Active => format!(
+            "{:?} | {}",
+            bot.system_status,
+            program.map_or("No program".to_owned(), |p| format!("{:?}", p.status))
+        ),
+        db::bots::OwnerSetStatus::Inactive => "Inactive".to_owned(),
+    }
 }

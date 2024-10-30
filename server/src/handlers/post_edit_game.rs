@@ -157,9 +157,9 @@ async fn post_edit_game(
                                 }
                             })?
                             .last_insert_id;
-                        add_rw_acl(txn, requester, db::common::EntityKind::Program, program_id)
+                        acl::add_rw(txn, requester, db::common::EntityKind::Program, program_id)
                             .await?;
-                        add_rw_acl(txn, requester, db::common::EntityKind::Game, game_id).await?;
+                        acl::add_rw(txn, requester, db::common::EntityKind::Game, game_id).await?;
                         if let Some(source) = gameserver_source {
                             write_source(&file_store, txn, requester, program_id, source)
                                 .await
@@ -374,42 +374,4 @@ async fn write_content<C: ConnectionTrait>(
         file
     };
     file_store.write(db, requester, file).await
-}
-
-async fn add_rw_acl<C: ConnectionTrait>(
-    db: &C,
-    requester: Requester,
-    entity_kind: db::common::EntityKind,
-    entity_id: i64,
-) -> Result<(), AppHttpError> {
-    let Requester::Account(owner_id) = requester else {
-        return Err(AppHttpError::Unauthenticated);
-    };
-    let base = db::acls::ActiveModel {
-        grantee_kind: Set(db::acls::GranteeKind::Account),
-        grantee_id: Set(Some(owner_id)),
-        entity_kind: Set(entity_kind),
-        entity_id: Set(Some(entity_id)),
-        ..Default::default()
-    };
-    let mut access_types = vec![db::acls::AccessType::Read, db::acls::AccessType::Write];
-    if entity_kind == db::common::EntityKind::Game {
-        access_types.push(db::acls::AccessType::ReadMatchesOfGame);
-        access_types.push(db::acls::AccessType::CreateBotsInGame);
-    }
-    let updates = access_types
-        .into_iter()
-        .map(|access_type| db::acls::ActiveModel {
-            access_type: Set(access_type),
-            ..base.clone()
-        });
-
-    db::acls::Entity::insert_many(updates)
-        .exec(db)
-        .await
-        .map_err(|e| {
-            log::error!("Failed to insert acls for {entity_kind:?} {entity_id}: {e:?}");
-            AppHttpError::Internal
-        })?;
-    Ok(())
 }
