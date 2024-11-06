@@ -333,6 +333,7 @@ fn from_db_language(language: db::programs::Language) -> manager::Language {
     match language {
         db::programs::Language::Cpp => manager::Language::Cpp,
         db::programs::Language::Rust => manager::Language::Rust,
+        db::programs::Language::RustCargo => manager::Language::RustCargo,
         db::programs::Language::Python => manager::Language::Python,
         db::programs::Language::Go => manager::Language::Go,
         db::programs::Language::Java => manager::Language::Java,

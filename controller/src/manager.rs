@@ -37,6 +37,7 @@ pub struct Manager {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub enum Language {
     Rust,
+    RustCargo,
     Cpp,
     Java,
     Python,
@@ -318,6 +319,7 @@ impl Manager {
     fn source_filename(&self, language: Language) -> std::path::PathBuf {
         match language {
             Language::Rust => "main.rs",
+            Language::RustCargo => "src/main.rs",
             Language::Python => "main.py",
             Language::Java => "Main.java",
             Language::Cpp => "main.cc",
@@ -328,7 +330,11 @@ impl Manager {
 
     fn needs_compilation(&self, language: Language) -> bool {
         match language {
-            Language::Cpp | Language::Go | Language::Java | Language::Rust => true,
+            Language::Cpp
+            | Language::Go
+            | Language::Java
+            | Language::Rust
+            | Language::RustCargo => true,
             Language::Python => false,
         }
     }
@@ -390,16 +396,27 @@ impl Manager {
         container_name: &str,
         program: &Program,
     ) -> anyhow::Result<()> {
-        if let Some(template_dir) = self.config.template_dir.get(&program.language) {
-            self.copy_into_container(container_name, template_dir, "/agent/agent")
-                .await
-                .context("Failed to copy the template into container")?;
-        }
         // TODO: async-tempfile.
         let td = tempfile::tempdir().context("Failed to create a temporary directory")?;
-        tokio::fs::create_dir(td.path().join("agent"))
-            .await
-            .context("Failed to create a staging 'agent' directory")?;
+        if let Some(template_dir) = self.config.template_dir.get(&program.language) {
+            let cp_result = tokio::process::Command::new("cp")
+                .arg("-r")
+                .arg(template_dir)
+                .arg(td.path().join("agent"))
+                .output()
+                .await
+                .context("Failed to copy project template to temp dir.")?;
+            if !cp_result.status.success() {
+                return Err(anyhow!(
+                    "Failed to copy project template to temp dir: cp failed:\n{}",
+                    String::from_utf8_lossy(&cp_result.stderr)
+                ));
+            }
+        } else {
+            tokio::fs::create_dir(td.path().join("agent"))
+                .await
+                .context("Failed to create a staging 'agent' directory")?;
+        }
         let project_dir = td.path().join("agent");
         let source_file = project_dir.join(self.source_filename(program.language));
         tokio::fs::write(&source_file, &program.source_code)
@@ -429,6 +446,7 @@ impl Manager {
     fn compilation_command(&self, language: Language) -> String {
         match language {
             Language::Rust => "rustc --edition=2021 -O main.rs".to_owned(),
+            Language::RustCargo => "cargo build --release --offline".to_owned(),
             Language::Go => "go build main.go".to_owned(),
             Language::Java => "javac Main.java".to_owned(),
             Language::Cpp => "g++ -std=c++23 -o main -O2 main.cc".to_owned(),
@@ -445,7 +463,7 @@ impl Manager {
 
     fn run_command_for_agent(&self, agent: &Agent) -> String {
         match agent.language {
-            Language::Rust | Language::Go | Language::Cpp => "./main",
+            Language::Rust | Language::Go | Language::Cpp | Language::RustCargo => "./main",
             Language::Java => "java Main",
             Language::Python => "python3 main.py",
         }
@@ -455,6 +473,7 @@ impl Manager {
     fn compilation_artifact(&self, language: Language) -> PathBuf {
         match language {
             Language::Rust | Language::Go | Language::Cpp => "main".into(),
+            Language::RustCargo => "target/release/main".into(),
             Language::Java => "Main.class".into(),
             Language::Python => "main.py".into(),
         }

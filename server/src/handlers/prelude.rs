@@ -102,6 +102,7 @@ pub fn parse_language(language: &str) -> Result<db::programs::Language, AppHttpE
         "java" => db::programs::Language::Java,
         "python" => db::programs::Language::Python,
         "rust" => db::programs::Language::Rust,
+        "rustcargo" => db::programs::Language::RustCargo,
         _ => return Err(AppHttpError::CouldNotDetermineLanguage(language.to_owned())),
     })
 }

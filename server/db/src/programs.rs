@@ -20,6 +20,8 @@ pub enum Language {
     Cpp,
     #[sea_orm(string_value = "rust")]
     Rust,
+    #[sea_orm(string_value = "rustcargo")]
+    RustCargo,
     #[sea_orm(string_value = "python")]
     Python,
     #[sea_orm(string_value = "go")]
@@ -33,6 +35,7 @@ impl Language {
         match self {
             Language::Cpp => "C++",
             Language::Rust => "Rust",
+            Language::RustCargo => "Rust (Cargo)",
             Language::Python => "Python",
             Language::Go => "Go",
             Language::Java => "Java",
