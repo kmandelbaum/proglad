@@ -174,19 +174,9 @@ impl MatchOnServer {
 
     async fn run_impl(&mut self) -> anyhow::Result<MatchResult> {
         self.ready_deadline = Some(std::time::Instant::now() + self.player_ready_timeout);
-        for id in 0..=self.players.len() {
-            let Some(param_str) = self.params.get(id) else {
-                continue;
-            };
-            if param_str.is_empty() {
-                continue;
-            }
-            let msg = format!("param {param_str}");
-            if id == 0 {
-                self.game_send(msg).await?;
-                continue;
-            }
-            self.send_to_player(id, &msg).await?;
+        self.game_send("vis inline".to_owned()).await?;
+        if let Some(param_str) = self.params.first() {
+            self.game_send(format!("param {param_str}")).await?;
         }
         loop {
             match &mut self.state {

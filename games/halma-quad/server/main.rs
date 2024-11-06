@@ -8,18 +8,22 @@ fn main() {
     stdin.read_line(&mut buf).unwrap();
     let mut parts = buf.split_ascii_whitespace();
     let mut visualize = false;
-    let mut firstline = None;
+    let mut inlinevisualize = false;
     match (parts.next(), parts.next()) {
-        (Some("param"), Some("inlinevisualize")) => {
+        (Some("vis"), Some("inline")) => {
+            inlinevisualize = true;
+        }
+        (Some("vis"), Some("standalone")) => {
             visualize = true;
         }
-        (Some("param"), Some("visualize")) => {
-            visualizer::visualize();
-        }
-        _ => firstline = Some(&buf),
+        _ => {}
     }
-    let mut h = Handler::new(stdout, visualize);
-    firstline.map(|line| h.handle_line(line));
+    stdin.read_line(&mut buf).unwrap();  // Skip "param".
+    if visualize {
+        visualizer::visualize();
+        return;
+    }
+    let mut h = Handler::new(stdout, inlinevisualize);
     loop {
         buf.clear();
         match stdin.read_line(&mut buf) {

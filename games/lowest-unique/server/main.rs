@@ -5,6 +5,7 @@ struct Handler<W> {
     out: W,
     num_players: usize,
     num_options: usize,
+    want_visualize: bool,
     visualizer: Option<visualizer::Visualizer>,
     players_alive: Vec<usize>,
     scores: Vec<f64>,
@@ -29,20 +30,26 @@ impl<W: Write> Handler<W> {
             timer_id: 0,
             turn: 0,
             max_turn: 0,
+            want_visualize: false,
         }
     }
     fn handle_line(&mut self, line: &str) -> bool {
         let mut it = line.split_ascii_whitespace();
         match it.next().unwrap() {
+            "vis" => {
+                match it.next() {
+                    Some("inline") => self.want_visualize = true,
+                    _ => {}
+                }
+            }
             "param" => {
                 self.num_players = it.next().unwrap().parse().unwrap();
                 self.num_options = it.next().map_or(5, |x| x.parse().unwrap());
                 self.max_turn = it.next().map_or(500, |x| x.parse().unwrap());
-                let vis = it.next() == Some("inlinevisualize");
                 self.players_alive = (1..=self.num_players).collect();
                 self.has_moved = vec![None; 1 + self.num_players];
                 self.scores = vec![0.; 1 + self.num_players];
-                if vis {
+                if self.want_visualize {
                     self.visualizer = Some(visualizer::Visualizer::new(
                         self.num_players,
                         self.num_options,
