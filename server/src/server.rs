@@ -50,7 +50,7 @@ pub async fn create(config: Config) -> anyhow::Result<Handle> {
     .context("Failed to register templates directory")?;
     let port = config.server_config.port;
 
-    let file_store = FileStore {};
+    let file_store = FileStore::new();
     let scheduler = scheduler::start(db.clone(), file_store.clone(), man, &config).await;
     let app_state = ServerState {
         tmpl,

@@ -18,7 +18,7 @@ async fn main() -> anyhow::Result<()> {
     let cfg = Config::parse();
     let db = sea_orm::Database::connect(&cfg.db).await?;
     let programs = db::programs::Entity::find().all(&db).await?;
-    let file_store = FileStore {};
+    let file_store = FileStore::new();
     for p in programs {
         let Some(source_code) = p.source_code else {
             continue;

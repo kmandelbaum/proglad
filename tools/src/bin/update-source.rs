@@ -5,6 +5,7 @@ use sea_orm::Set;
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 
 use proglad_db as db;
+use proglad_server::file_store;
 
 #[derive(Parser, Debug)]
 struct Config {
@@ -46,22 +47,35 @@ async fn main() -> anyhow::Result<()> {
     let cfg = Config::parse();
     let db = sea_orm::Database::connect(&cfg.db).await?;
     let id = program_id(&cfg, &db).await?;
-    let contents = tokio::fs::read_to_string(&cfg.filename).await?;
-    let mut update = db::programs::ActiveModel {
-        id: Set(id),
-        source_code: Set(Some(contents)),
+    let content = tokio::fs::read_to_string(&cfg.filename).await?;
+    let fs = file_store::FileStore::new();
+    let file = db::files::Model {
+        owning_entity: db::common::EntityKind::Program,
+        owning_id: Some(id),
+        content_type: db::files::ContentType::PlainText,
+        kind: db::files::Kind::SourceCode,
+        content: Some(content.into_bytes()),
+        last_update: TimeDateTimeWithTimeZone::now_utc(),
+        name: String::new(),
+        compression: db::files::Compression::Uncompressed,
         ..Default::default()
     };
+    let file = file_store::FileStore::compress(file)?;
+    fs.write(&db, file_store::Requester::System, file).await?;
     println!("Program id: {id}");
     if !cfg.skip_status_reset {
         println!("Will reset the program status to force recompilation.");
-        update.status = Set(db::programs::Status::New);
-        update.status_reason = Set(Some("Reset by update-source".to_owned()));
-        update.status_update_time = Set(TimeDateTimeWithTimeZone::now_utc());
+        let update = db::programs::ActiveModel {
+            id: Set(id),
+            status: Set(db::programs::Status::New),
+            status_reason: Set(Some("Reset by update-source".to_owned())),
+            status_update_time: Set(TimeDateTimeWithTimeZone::now_utc()),
+            ..Default::default()
+        };
+        db::programs::Entity::update(update).exec(&db).await?;
     } else {
         println!("Skipping status reset. The program won't be recompiled");
     }
-    db::programs::Entity::update(update).exec(&db).await?;
     println!("Updated successfully.");
     Ok(())
 }

@@ -25,6 +25,9 @@ pub enum Error {
 impl std::error::Error for Error {}
 
 impl FileStore {
+    pub fn new() -> Self {
+        Self {}
+    }
     pub async fn write<C: ConnectionTrait>(
         &self,
         db: &C,
@@ -174,7 +177,7 @@ mod test {
         migration::Migrator::up(&db, None)
             .await
             .expect("Applying initial DB migrations failed");
-        let store = FileStore {};
+        let store = FileStore::new();
         let requester = Requester::System;
         assert_eq!(
             store
