@@ -973,12 +973,13 @@ pub async fn select_and_run_work_item<C: ConnectionTrait + TransactionTrait>(
     };
     let work_item_id = work_item.id;
     let res = run_work_item(db, file_store, man, work_item, match_runner_config).await;
-    let status = if res.is_ok() {
-        db::work_items::Status::Completed
-    } else {
-        db::work_items::Status::Failed
+    let status = match res {
+        Ok(_) => db::work_items::Status::Completed,
+        Err(e) => {
+            log::error!("Work item failed: {e:?}");
+            db::work_items::Status::Failed
+        }
     };
-
     let now = TimeDateTimeWithTimeZone::now_utc();
     let writeback = db::work_items::ActiveModel {
         id: Set(work_item_id),
