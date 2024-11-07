@@ -2,6 +2,7 @@
 */www
 api/Cargo.lock
 controller/Cargo.lock
+agent-templates/rust/Cargo.lock
 prod
 server/db.sqlite
 server/db.sqlite-journal
