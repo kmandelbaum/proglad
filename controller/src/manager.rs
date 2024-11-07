@@ -628,7 +628,7 @@ impl Manager {
             "--pids-limit",
             "256",
             "--mount",
-            "type=volume,destination=/agent,volume-opt=size=50M",
+            "type=volume,destination=/agent,volume-opt=size=200M",
             "--mount",
             "type=volume,destination=/root/.cache,volume-opt=size=50M",
             "--mount",
